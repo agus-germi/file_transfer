@@ -4,8 +4,8 @@
 
 Este proyecto implementa un protocolo de aplicación para la transferencia de archivos utilizando el protocolo **UDP**. La arquitectura es cliente-servidor, y las operaciones principales soportadas son:
 
-    - **UPLOAD**: Transferencia de un archivo desde el cliente hacia el servidor.
-    - **DOWNLOAD**: Transferencia de un archivo desde el servidor hacia el cliente.
+- **UPLOAD**: Transferencia de un archivo desde el cliente hacia el servidor.
+- **DOWNLOAD**: Transferencia de un archivo desde el servidor hacia el cliente.
 
 El protocolo garantiza la entrega confiable de archivos implementando dos versiones:
     - **Stop & Wait**
