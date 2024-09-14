@@ -13,14 +13,14 @@ El protocolo garantiza la entrega confiable de archivos implementando dos versio
 
 Además, se simulan condiciones de pérdida de paquetes usando **Mininet** para validar la robustez del protocolo.
 
-- Requisitos
+- ### Requisitos
  (Agregar requisitos!)
 
-    - Dependencias
-        - **Python 3.x** 
-        - **Librería estándar de sockets** (incluida en Python)
-        - **Mininet** (para simular redes con pérdida de paquetes)
-        - **flake8** (para cumplir con el estándar de codificación PEP8)
+*Dependencias*
+    - **Python 3.x** 
+    - **Librería estándar de sockets** (incluida en Python)
+    - **Mininet** (para simular redes con pérdida de paquetes)
+    - **flake8** (para cumplir con el estándar de codificación PEP8)
 
     - Instalación de flake8
         ```bash
@@ -30,7 +30,7 @@ Además, se simulan condiciones de pérdida de paquetes usando **Mininet** para 
     - Instalación de Mininet
         Puedes instalar Mininet siguiendo las instrucciones oficiales en [https://mininet.org/download/](https://mininet.org/download/).
 
-- Ejecución del Servidor
+- #### Ejecución del Servidor
     - Para iniciar el servidor, usa el siguiente comando:
         ``` bash
         python start-server -H <IP_SERVIDOR> -p <PUERTO> -s <DIRECTORIO_ALMACENAMIENTO> [-v | -q]
@@ -48,7 +48,7 @@ Además, se simulan condiciones de pérdida de paquetes usando **Mininet** para 
         python start-server -H 127.0.0.1 -p 5000 -s /tmp/server_files
         ```
 
-- Ejecución del Cliente
+- #### Ejecución del Cliente
     - Subida de Archivos **(UPLOAD)**
         - Para subir un archivo al servidor, ejecuta el siguiente comando:
             ```bash
