@@ -22,12 +22,12 @@ Además, se simulan condiciones de pérdida de paquetes usando **Mininet** para 
     - **Mininet** (para simular redes con pérdida de paquetes)
     - **flake8** (para cumplir con el estándar de codificación PEP8)
 
-    - Instalación de flake8
+- Instalación de flake8
         ```bash
         pip install flake8
         ```
 
-    - Instalación de Mininet
+ - Instalación de Mininet
         Puedes instalar Mininet siguiendo las instrucciones oficiales en [https://mininet.org/download/](https://mininet.org/download/).
 
 - #### Ejecución del Servidor
