@@ -1,4 +1,5 @@
 import argparse
+import socket
 
 # > python start - server -h
 # usage : start - server [ - h ] [ - v | -q ] [ - H ADDR ] [ - p PORT ] [- s DIRPATH ]
@@ -29,6 +30,13 @@ def main():
     if args.verbose:
         print("verbosity turned on")
 
+    # Creo un socket UDP
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    server_address = ('10.0.0.1', 8087)
+    server_socket.bind(server_address)
+    while True:
+        data, addr = server_socket.recvfrom(1024)
+        #muchas mas cosas aca
     return
 
 if __name__ == "__main__":
