@@ -66,19 +66,3 @@ if __name__ == '__main__':
         start_server()
         
 
-"""
-Init del cliente:
-Protocolo
-Accion (Download - Upload)
-
-Encabezado:
-ID para identificar el cliente? O con la IP es suficiente? DUDA
-Numero de secuencia
-ACK
-Data
-
-
-
-
-
-"""
