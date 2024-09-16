@@ -9,8 +9,8 @@
 - flags:
     1) para indicar el fin -> para indicar el fin de la transaccion y cerrar socket
     2) Data type:
-        data type 1) paquete ACK -> DUDA : teniendo esto y el nro d secuencia, es necesario un nu¡ro de ACK ??
-        data type 2) paquete de datos
+        - data type 1) paquete ACK -> DUDA : teniendo esto y el nro d secuencia, es necesario un nro de ACK ??
+        - data type 2) paquete de datos
 - datos
 - id cliente ? o algo que identifique al tipo de cliente ?
 
