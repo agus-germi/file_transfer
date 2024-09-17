@@ -3,7 +3,7 @@ import sys
 import os
 import time
 import signal
-from utils.udp import Connection, UDPPackage, UDPFlags, UDPHeader, MAX_RETRIES, TIMEOUT, send_package, receive_package
+from utils.udp import Connection, UDPPackage, UDPFlags, UDPHeader, MAX_RETRIES, TIMEOUT, send_package, receive_package, close_connection
 from utils.udp import CloseConnectionException
 
 HOST = 'localhost'
@@ -32,7 +32,6 @@ def connect_server():
 
         if header.has_ack() and header.has_start() and header.server_sequence == 0:
             header.set_flag(UDPFlags.ACK)
-            #time.sleep(4)
             send_package(client_socket, connection, header, b"")
             print("Conexión establecida con el servidor.")
             return True
@@ -44,12 +43,6 @@ def connect_server():
         print("Error: No se pudo establecer conexión con el servidor.")
         client_socket.close()
         return False
-
-
-def close_connection():
-    header = UDPHeader(0, 0, 0, 0)
-    header.set_flag(UDPFlags.CLOSE)
-    send_package(client_socket, connection, header, b"")
 
 
 def send_data_stop_and_wait():
@@ -64,7 +57,7 @@ def send_data_stop_and_wait():
         while not ack_received and retry_count < MAX_RETRIES:
             try:
                 send_package(client_socket, connection, header, data)
-                print(f"Mensaje {i} enviado al servidor. Intento {retry_count + 1}.")                
+                print(f"Mensaje {i} enviado al servidor. Intento {retry_count + 1}.")
                 addr, header, data = receive_package(client_socket)
 
                 if header.has_close():
@@ -85,7 +78,7 @@ def send_data_stop_and_wait():
         
         if not ack_received:
             print(f"Error: ACK {i} no se recibió después de {MAX_RETRIES} intentos.")
-            close_connection()
+            close_connection(client_socket, connection)
             break  # Terminar el bucle si no se recibe el ACK después de varios intentos
 
 

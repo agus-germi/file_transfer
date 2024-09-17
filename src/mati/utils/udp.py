@@ -106,12 +106,19 @@ class CloseConnectionException(Exception):
         self.codigo_error = codigo_error
 
 
-def send_package(socket, connection, header, data):
+def send_package(socket: socket.socket, connection: Connection, header, data):
     package = UDPPackage().pack(header, data)
     socket.sendto(package, (connection.ip, connection.socket))
 
 
-def receive_package(socket):
+def receive_package(socket: socket.socket):
     data, addr = socket.recvfrom(1024)
     data, header = UDPPackage(data).unpack()
     return addr, header, data
+
+
+def close_connection(socket: socket.socket, connection: Connection):
+    header = UDPHeader(0, 0, 0, 0)
+    header.set_flag(UDPFlags.CLOSE)
+    print("Enviando paquete de cierre ", connection.ip, "-", connection.socket)
+    send_package(socket, connection, header, b"")
