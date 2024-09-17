@@ -1,4 +1,9 @@
 import argparse  # https://docs.python.org/es/3/library/argparse.html
+from src.lib.logger import setup_logger
+
+def configure_logging(args):
+    logger = setup_logger(verbose=args.verbose, quiet=args.quiet)
+    return logger
 
 def add_verbosity_args(parser):
     group = parser.add_mutually_exclusive_group()  # either one or the other not both
@@ -62,7 +67,7 @@ def parse_server_args():
 
     add_verbosity_args(parser)
     add_network_args(parser)
-    
+
     parser.add_argument(
         '-s', '--storage', required=True, help='storage directory path'
     )
