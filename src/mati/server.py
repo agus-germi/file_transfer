@@ -3,7 +3,7 @@ import sys
 import os
 import time
 import signal
-from utils.udp import Connection, UDPPackage, UDPFlags, UDPHeader, TIMEOUT, send_package, receive_package
+from utils.udp import Connection, UDPPackage, UDPFlags, UDPHeader, TIMEOUT, send_package, receive_package, close_connection
 
 STORAGE_PATH = 'storage'
 
@@ -47,6 +47,28 @@ def limpiar_recursos(signum, frame):
     sys.exit(0)  # Salgo del programa con código 0 (éxito)
 
 
+def handle_handshake(server_socket: socket.socket, connection: Connection, conn_key):
+    header = UDPHeader(0, connection.client_sequence, 0, 0)
+    header.set_flag(UDPFlags.START)
+    header.set_flag(UDPFlags.ACK)
+    try:
+        #time.sleep(3)
+        send_package(server_socket, connection, header, b"")
+        server_socket.settimeout(TIMEOUT)
+        addr, header, data = receive_package(server_socket)
+        server_socket.settimeout(None)
+        if header.has_ack() and header.has_start():
+            connection.started = True            
+            connections[conn_key] = connection
+            print("Cliente Aceptado: ", conn_key)
+            # TODO Deberia cerrar conexion si no?
+    except:
+        print("Cliente Rechazado: ", conn_key)
+
+
+
+
+
 def check_connection(server_socket, addr, header: UDPHeader, data):
     conn_key = f"{addr[0]}-{addr[1]}"
     connection = Connection(
@@ -58,28 +80,12 @@ def check_connection(server_socket, addr, header: UDPHeader, data):
             download=header.has_download(),
         )
     # TODO Set path 
-    if header.has_start() and header.client_sequence == 0:        
-        header = UDPHeader(0, header.client_sequence, 0, 0)
-        header.set_flag(UDPFlags.START)
-        header.set_flag(UDPFlags.ACK)
-        try:
-            #time.sleep(3)
-            send_package(server_socket, connection, header, b"")
-            server_socket.settimeout(TIMEOUT)
-            addr, header, data = receive_package(server_socket)
-            server_socket.settimeout(None)
-            if header.has_ack() and header.has_start():
-                connection.started = True            
-                connections[conn_key] = connection
-                print("Cliente Aceptado: ", conn_key)
-                # TODO Deberia cerrar conexion si no?
-        except:
-            print("Cliente Rechazado: ", conn_key)
+    if header.has_start() and header.client_sequence == 0:
+        handle_handshake(server_socket, connection, conn_key)
     else:
+        # Cierra la conexion porque no se respeta el protocolo
         try:
-            header = UDPHeader(0, 0, 0, 0)
-            header.set_flag(UDPFlags.CLOSE)
-            send_package(server_socket, connection, header, b"")
+            close_connection(server_socket, connection)
         except:
             pass
         finally:
