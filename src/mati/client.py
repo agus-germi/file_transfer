@@ -1,13 +1,10 @@
 import socket
 import sys
 import os
-import time
 import signal
-from utils.udp import Connection, UDPPackage, UDPFlags, UDPHeader, MAX_RETRIES, TIMEOUT, send_package, receive_package, close_connection
+from utils.udp import Connection, UDPFlags, UDPHeader, MAX_RETRIES, TIMEOUT, send_package, receive_package, close_connection
 from utils.udp import CloseConnectionException
-
-HOST = 'localhost'
-PORT = 8088
+from lib.constants import HOST, PORT
 
 DOWNLOAD = True
 

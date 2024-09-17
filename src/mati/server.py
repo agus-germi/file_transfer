@@ -1,11 +1,10 @@
 import socket
 import sys
 import os
-import time
 import signal
-from utils.udp import Connection, UDPPackage, UDPFlags, UDPHeader, TIMEOUT, send_package, receive_package, close_connection, reject_connection
+from utils.udp import Connection, UDPFlags, UDPHeader, TIMEOUT, send_package, receive_package,  reject_connection
 
-STORAGE_PATH = 'storage'
+STORAGE = 'storage'
 
 connections = {}
 
