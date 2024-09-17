@@ -1,17 +1,10 @@
 
 import struct
 import socket
-import sys
-
-
-TIMEOUT = 2  # Timeout in seconds
-MAX_RETRIES = 3 # Numero maximo de reintentos
+from lib.constants import HEADER_FORMAT, HEADER_SIZE
 
 
 class UDPHeader:
-    HEADER_FORMAT = '!B I I I'
-    HEADER_SIZE = struct.calcsize(HEADER_FORMAT)  # Size of the header in bytes
-
     def __init__(self, flags, client_sequence, server_sequence, data_length):
         self.flags = flags  # Flags (1 byte)
         self.client_sequence = client_sequence  # Sequence number (4 bytes)
@@ -20,7 +13,7 @@ class UDPHeader:
 
     def pack(self):
         """Pack the header into binary format."""
-        return struct.pack(self.HEADER_FORMAT, self.flags, self.client_sequence, self.server_sequence, self.data_length)
+        return struct.pack(HEADER_FORMAT, self.flags, self.client_sequence, self.server_sequence, self.data_length)
 
     @classmethod
     def unpack(cls, binary_header):
@@ -63,13 +56,13 @@ class UDPPackage:
     def unpack(self):
         """Unpack the data into ProtocolHeader and remaining data."""
         # Ensure there is enough data to unpack the header
-        if len(self.data) < UDPHeader.HEADER_SIZE:
+        if len(self.data) < HEADER_SIZE:
             raise ValueError("Data is smaller than header size")
 
         # Extract header and remaining data
-        binary_header = self.data[:UDPHeader.HEADER_SIZE]
+        binary_header = self.data[:HEADER_SIZE]
         header = UDPHeader.unpack(binary_header)
-        remaining_data = self.data[UDPHeader.HEADER_SIZE:]
+        remaining_data = self.data[HEADER_SIZE:]
 
         return remaining_data, header
 
