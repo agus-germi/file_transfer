@@ -16,6 +16,13 @@ import socket
 
 
 def main():
+
+    # USE:
+    #   args = parse_download_args()
+    #   logger = configure_logging(args)
+    #   logger.info(f"Downloading file {args.name} to {args.dst} from {args.host}:{args.port}")
+    
+    #TODO: Sacar esta parte ya esta en parser.py
     parser = argparse.ArgumentParser()
     parser.add_argument("-h", "--help", help="show this help message and exit", action="store_true")
     parser.add_argument("-v", "--verbose", action="store_true", help="increase output verbosity")
