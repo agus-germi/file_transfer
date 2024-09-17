@@ -122,3 +122,13 @@ def close_connection(socket: socket.socket, connection: Connection):
     header.set_flag(UDPFlags.CLOSE)
     print("Enviando paquete de cierre ", connection.ip, "-", connection.socket)
     send_package(socket, connection, header, b"")
+
+
+def reject_connection(server_socket, connection, conn_key):
+    """Intenta cerrar la conexión y manejar cualquier error."""
+    try:
+        close_connection(server_socket, connection)
+    except Exception:
+        pass
+    finally:
+        print(f"Cliente Rechazado: {conn_key}")

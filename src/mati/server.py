@@ -3,7 +3,7 @@ import sys
 import os
 import time
 import signal
-from utils.udp import Connection, UDPPackage, UDPFlags, UDPHeader, TIMEOUT, send_package, receive_package, close_connection
+from utils.udp import Connection, UDPPackage, UDPFlags, UDPHeader, TIMEOUT, send_package, receive_package, close_connection, reject_connection
 
 STORAGE_PATH = 'storage'
 
@@ -55,8 +55,7 @@ def handle_handshake(server_socket: socket.socket, connection: Connection, conn_
         #time.sleep(3)
         send_package(server_socket, connection, header, b"")
         server_socket.settimeout(TIMEOUT)
-        addr, header, data = receive_package(server_socket)
-        server_socket.settimeout(None)
+        addr, header, data = receive_package(server_socket)        
         if header.has_ack() and header.has_start():
             connection.started = True            
             connections[conn_key] = connection
@@ -64,9 +63,8 @@ def handle_handshake(server_socket: socket.socket, connection: Connection, conn_
             # TODO Deberia cerrar conexion si no?
     except:
         print("Cliente Rechazado: ", conn_key)
-
-
-
+    finally:
+        server_socket.settimeout(None)
 
 
 def check_connection(server_socket, addr, header: UDPHeader, data):
@@ -79,17 +77,11 @@ def check_connection(server_socket, addr, header: UDPHeader, data):
             upload=header.has_upload(),
             download=header.has_download(),
         )
-    # TODO Set path 
+    # TODO Set path
     if header.has_start() and header.client_sequence == 0:
         handle_handshake(server_socket, connection, conn_key)
     else:
-        # Cierra la conexion porque no se respeta el protocolo
-        try:
-            close_connection(server_socket, connection)
-        except:
-            pass
-        finally:
-            print("Cliente Rechazado: ", conn_key)
+        reject_connection(server_socket, connection, conn_key)
 
 
 
