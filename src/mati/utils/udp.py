@@ -4,6 +4,10 @@ import socket
 import sys
 
 
+TIMEOUT = 2  # Timeout in seconds
+MAX_RETRIES = 3 # Numero maximo de reintentos
+
+
 class UDPHeader:
     HEADER_FORMAT = '!B I I I'
     HEADER_SIZE = struct.calcsize(HEADER_FORMAT)  # Size of the header in bytes
@@ -41,6 +45,15 @@ class UDPHeader:
     
     def has_start(self):
         return self.has_flag(UDPFlags.START)
+    
+    def has_close(self):
+        return self.has_flag(UDPFlags.CLOSE)
+    
+    def has_download(self):
+        return self.has_flag(UDPFlags.DOWNLOAD)
+    
+    def has_upload(self):
+        return self.has_flag(UDPFlags.UPLOAD)
 
 
 class UDPPackage:
@@ -71,12 +84,34 @@ class UDPFlags:
     ACK = 0b00000100
     END = 0b00001000
     CLOSE = 0b00010000
+    UPLOAD = 0b10000000
+    DOWNLOAD = 0b01000000
 
 
 class Connection:
-    def __init__(self, ip="", socket=None, client_sequence=None, server_sequence=None):
+    def __init__(self, ip="", socket=None, client_sequence=None, server_sequence=None, upload = False, download = False):
         self.ip = ip
         self.socket = socket
         self.client_sequence = client_sequence
         self.server_sequence = server_sequence
+        self.started = False
+        self.upload = upload
+        self.download = download
+        self.path = ""
 
+
+class CloseConnectionException(Exception):
+    def __init__(self, mensaje, codigo_error):
+        super().__init__(mensaje)
+        self.codigo_error = codigo_error
+
+
+def send_package(socket, connection, header, data):
+    package = UDPPackage().pack(header, data)
+    socket.sendto(package, (connection.ip, connection.socket))
+
+
+def receive_package(socket):
+    data, addr = socket.recvfrom(1024)
+    data, header = UDPPackage(data).unpack()
+    return addr, header, data

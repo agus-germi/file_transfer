@@ -1,8 +1,9 @@
 import socket
 import sys
 import os
+import time
 import signal
-from utils.udp import Connection, UDPPackage, UDPFlags, UDPHeader
+from utils.udp import Connection, UDPPackage, UDPFlags, UDPHeader, TIMEOUT, send_package, receive_package
 
 STORAGE_PATH = 'storage'
 
@@ -48,37 +49,76 @@ def limpiar_recursos(signum, frame):
 
 def check_connection(server_socket, addr, header: UDPHeader, data):
     conn_key = f"{addr[0]}-{addr[1]}"
-    if header.has_start() and header.client_sequence == 0:
-        connections[conn_key] = Connection(
-            ip=addr,
-            socket=server_socket,
+    connection = Connection(
+            ip=addr[0],
+            socket=addr[1],
             client_sequence=header.client_sequence,
-            server_sequence=0
+            server_sequence=0,
+            upload=header.has_upload(),
+            download=header.has_download(),
         )
+    # TODO Set path 
+    if header.has_start() and header.client_sequence == 0:        
         header = UDPHeader(0, header.client_sequence, 0, 0)
         header.set_flag(UDPFlags.START)
         header.set_flag(UDPFlags.ACK)
-        data_to_send = UDPPackage().pack(header, b"")
-        server_socket.sendto(data_to_send, addr)
-        print("Cliente Aceptado: ", conn_key)
+        try:
+            #time.sleep(3)
+            send_package(server_socket, connection, header, b"")
+            server_socket.settimeout(TIMEOUT)
+            addr, header, data = receive_package(server_socket)
+            server_socket.settimeout(None)
+            if header.has_ack() and header.has_start():
+                connection.started = True            
+                connections[conn_key] = connection
+                print("Cliente Aceptado: ", conn_key)
+                # TODO Deberia cerrar conexion si no?
+        except:
+            print("Cliente Rechazado: ", conn_key)
     else:
-        print("Cliente Rechazado: ", conn_key)
+        try:
+            header = UDPHeader(0, 0, 0, 0)
+            header.set_flag(UDPFlags.CLOSE)
+            send_package(server_socket, connection, header, b"")
+        except:
+            pass
+        finally:
+            print("Cliente Rechazado: ", conn_key)
 
 
 
 def handle_connection(server_socket):
-    fragment_size = 1020  # Tamaño del fragmento en bytes
-    data, addr = server_socket.recvfrom(fragment_size + 4)
-    data, header = UDPPackage(data).unpack()
-    conn_key = f"{addr[0]}-{addr[1]}"
-    print("Cliente Recibido: ", conn_key)
+    try:
+        addr, header, data = receive_package(server_socket)
+        conn_key = f"{addr[0]}-{addr[1]}"
+        print("Cliente Recibido: ", conn_key)
 
-    if not connections.get(conn_key):
-        check_connection(server_socket, addr, header, data)
-    else:
-        # TODO Hasta aca se ha establecido la conexión, manejar el resto de las cosas
-        pass
-    #recibir_archivo(server_socket, output_path)
+        if not connections.get(conn_key):
+            check_connection(server_socket, addr, header, data)
+            return None
+        
+        connection = connections.get(conn_key)
+        # No se inicializo la conexion y se recibio un paquete de datos
+        if header.has_flag(UDPFlags.DATA) and not connection.started:
+            header = UDPHeader(0, header.client_sequence, 0, 0)
+            header.set_flag(UDPFlags.CLOSE)
+            send_package(server_socket, connections.get(conn_key), header, b"")
+            print("Cliente Desconectado: ", conn_key)
+        # Se recibio un paquete de cierre
+        elif header.has_flag(UDPFlags.CLOSE):
+            connections.remove(conn_key)
+            # TODO Habria que cerrar desde el server?
+            print("Cliente Desconectado: ", conn_key)
+        else:
+            print(data)
+            header = UDPHeader(0, header.client_sequence, 0, 0)
+            header.set_flag(UDPFlags.ACK)
+            send_package(server_socket, connections.get(conn_key), header, b"")
+            # TODO Hasta aca se ha establecido la conexión, manejar el resto de las cosas
+            pass
+        #recibir_archivo(server_socket, output_path)
+    except ConnectionResetError:
+        print("Error: Conexión rechazada por el cliente.")
 
 
 def start_server():
