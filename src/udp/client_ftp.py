@@ -2,6 +2,7 @@ import socket
 import signal
 import sys
 import os
+import time
 
 
 # Crear un socket UDP
@@ -21,23 +22,39 @@ def enviar_archivo(client_socket, archivo_path, server_address):
     """Envía un archivo al servidor en fragmentos usando UDP."""
     fragment_size = 512  # Tamaño del fragmento en bytes
     file_size = os.path.getsize(archivo_path)
-    
+    max_retries = 3
+    timeout = 2
+
     with open(archivo_path, 'rb') as f:
         sequence_number = 0
         while True:
             fragment = f.read(fragment_size)
             if not fragment:
                 break
+
+            retries = 0
+            while retries < max_retries:
             # Envio fragmento de tamaño definido con su numero de secuencia
-            client_socket.sendto(sequence_number.to_bytes(4, 'big') + fragment, server_address)
-            sequence_number += 1
+                client_socket.sendto(sequence_number.to_bytes(4, 'big') + fragment, server_address)
+                client_socket.settimeout(timeout)
             # Espero confirmación del servidor
-            ack, _ = client_socket.recvfrom(1024)
-            if ack != b'ACK':
-                print("Error: Confirmación no recibida.")
+                try:
+                    ack, _ = client_socket.recvfrom(1024)
+                    if ack == b'ACK':
+                        print(f'ACK {sequence_number} recibido exitosamente')
+                        break
+                    else:
+                        print(f"Error: ACK {sequence_number} confirmación no válida recibida.")
+                except socket.timeout:
+                    print(f"Timeout: Reintentando el envío del fragmento {sequence_number}.") 
+                    retries += 1
+
+            if retries == max_retries:
+                print("Error: No se recibió confirmación después de 3 intentos.")
                 break
-            else: print(f'ACK {sequence_number - 1} recibido exitosamente')
-        
+
+            sequence_number += 1
+
         client_socket.sendto(b'END', server_address)
         print("Archivo enviado exitosamente.")
 
