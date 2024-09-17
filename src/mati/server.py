@@ -3,6 +3,7 @@ import sys
 import os
 import signal
 from utils.udp import Connection, UDPFlags, UDPHeader, TIMEOUT, send_package, receive_package,  reject_connection
+from lib.constants import HOST, PORT
 
 STORAGE = 'storage'
 
@@ -121,7 +122,7 @@ def handle_connection(server_socket):
 def start_server():
     # Creo un socket UDP
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    server_address = ('localhost', 8088)
+    server_address = (HOST, PORT)
     server_socket.bind(server_address)
     print(f"Servidor escuchando en {server_address}")
     try:
