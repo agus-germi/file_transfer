@@ -1,0 +1,92 @@
+import argparse  # https://docs.python.org/es/3/library/argparse.html
+
+
+def parse_upload_args():
+    parser = argparse.ArgumentParser(
+        prog='Upload',
+        description='Upload a file to the server.'
+    )
+
+    # Optional verbosity arguments
+    group = parser.add_mutually_exclusive_group()  # either one or the other not both
+    group.add_argument(
+        '-v', '--verbose', action='store_true', help='increase output verbosity'
+    )
+    group.add_argument(
+        '-q', '--quiet', action='store_true', help='decrease output verbosity'
+    )
+
+    # Optional arguments
+    parser.add_argument(
+        '-H', '--host', required=True, help='server IP address'
+    )
+    parser.add_argument(
+        '-p', '--port', type=int, required=True, help='server port'
+    )
+    parser.add_argument(
+        '-s', '--src', required=True, help='source file path to upload'
+    )
+    parser.add_argument(
+        '-n', '--name', required=True, help='file name to store on the server'
+    )
+
+    return parser.parse_args()
+
+
+def parse_download_args():
+    parser = argparse.ArgumentParser(
+        prog='Download', description='Download a file from the server.'
+    )
+
+    # Optional verbosity arguments
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        '-v', '--verbose', action='store_true', help='increase output verbosity'
+    )
+    group.add_argument(
+        '-q', '--quiet', action='store_true', help='decrease output verbosity'
+    )
+
+    # Optional arguments
+    parser.add_argument(
+        '-H', '--host', required=True, help='server IP address'
+    )
+    parser.add_argument(
+        '-p', '--port', type=int, required=True, help='server port'
+    )
+    parser.add_argument(
+        '-d', '--dst', required=True, help='destination file path to save the file'
+    )
+    parser.add_argument(
+        '-n', '--name', required=True, help='file name to download from the server'
+    )
+
+    return parser.parse_args()
+
+
+def parse_server_args():
+    parser = argparse.ArgumentParser(
+        prog='Server', description='Start the file server.'
+    )
+
+    # Optional verbosity arguments
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        '-v', '--verbose', action='store_true', help='increase output verbosity'
+    )
+    group.add_argument(
+        '-q', '--quiet', action='store_true', help='decrease output verbosity'
+    )
+
+    # Optional arguments
+    parser.add_argument(
+        '-H', '--host', required=True, help='service IP address'
+    )
+    parser.add_argument(
+        '-p', '--port', type=int, required=True, help='service port'
+    )
+    parser.add_argument(
+        '-s', '--storage', required=True, help='storage directory path'
+    )
+
+    return parser.parse_args()
