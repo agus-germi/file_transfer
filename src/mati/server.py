@@ -2,8 +2,8 @@ import socket
 import sys
 import os
 import signal
-from utils.udp import Connection, UDPFlags, UDPHeader, TIMEOUT, send_package, receive_package,  reject_connection
-from lib.constants import HOST, PORT
+from utils.udp import Connection, UDPFlags, UDPHeader, send_package, receive_package,  reject_connection
+from constants import HOST, PORT, TIMEOUT
 
 STORAGE = 'storage'
 
@@ -47,7 +47,7 @@ def limpiar_recursos(signum, frame):
     sys.exit(0)  # Salgo del programa con código 0 (éxito)
 
 
-def handle_handshake(server_socket: socket.socket, connection: Connection, conn_key):
+def handle_handshake(server_socket: socket.socket, connection: Connection):
     header = UDPHeader(0, connection.client_sequence, 0, 0)
     header.set_flag(UDPFlags.START)
     header.set_flag(UDPFlags.ACK)
@@ -55,63 +55,62 @@ def handle_handshake(server_socket: socket.socket, connection: Connection, conn_
         #time.sleep(3)
         send_package(server_socket, connection, header, b"")
         server_socket.settimeout(TIMEOUT)
-        addr, header, data = receive_package(server_socket)        
+        addr, header, data = receive_package(server_socket)
         if header.has_ack() and header.has_start():
-            connection.started = True            
-            connections[conn_key] = connection
-            print("Cliente Aceptado: ", conn_key)
+            connection.started = True
+            connections[connection.addr] = connection
+            print("Cliente Aceptado: ", connection.addr)
             # TODO Deberia cerrar conexion si no?
     except:
-        print("Cliente Rechazado: ", conn_key)
+        print("Cliente Rechazado: ", connection.addr)
     finally:
         server_socket.settimeout(None)
 
 
-def check_connection(server_socket, addr, header: UDPHeader, data):
-    conn_key = f"{addr[0]}-{addr[1]}"
+def check_connection(server_socket, addr, header: UDPHeader, data: bytes):
     connection = Connection(
-            ip=addr[0],
-            socket=addr[1],
+            addr=addr,
             client_sequence=header.client_sequence,
             server_sequence=0,
-            upload=header.has_upload(),
+            upload= not header.has_download(),
             download=header.has_download(),
+            path=data.decode()
         )
+    print("Path: ", data.decode())
     # TODO Set path
-    if header.has_start() and header.client_sequence == 0:
-        handle_handshake(server_socket, connection, conn_key)
+    if header.has_start() and header.client_sequence == 0 and data.decode() != "":
+        handle_handshake(server_socket, connection)
     else:
-        reject_connection(server_socket, connection, conn_key)
+        reject_connection(server_socket, connection)
 
 
 
 def handle_connection(server_socket):
     try:
         addr, header, data = receive_package(server_socket)
-        conn_key = f"{addr[0]}-{addr[1]}"
-        print("Cliente Recibido: ", conn_key)
+        print("Cliente Recibido: ", addr)
 
-        if not connections.get(conn_key):
+        if not connections.get(addr):
             check_connection(server_socket, addr, header, data)
             return None
         
-        connection = connections.get(conn_key)
+        connection = connections.get(addr)
         # No se inicializo la conexion y se recibio un paquete de datos
         if header.has_flag(UDPFlags.DATA) and not connection.started:
             header = UDPHeader(0, header.client_sequence, 0, 0)
             header.set_flag(UDPFlags.CLOSE)
-            send_package(server_socket, connections.get(conn_key), header, b"")
-            print("Cliente Desconectado: ", conn_key)
+            send_package(server_socket, connections.get(addr), header, b"")
+            print("Cliente Desconectado: ", addr)
         # Se recibio un paquete de cierre
         elif header.has_flag(UDPFlags.CLOSE):
-            connections.remove(conn_key)
+            connections.remove(addr)
             # TODO Habria que cerrar desde el server?
-            print("Cliente Desconectado: ", conn_key)
+            print("Cliente Desconectado: ", addr)
         else:
             print(data)
             header = UDPHeader(0, header.client_sequence, 0, 0)
             header.set_flag(UDPFlags.ACK)
-            send_package(server_socket, connections.get(conn_key), header, b"")
+            send_package(server_socket, connections.get(addr), header, b"")
             # TODO Hasta aca se ha establecido la conexión, manejar el resto de las cosas
             pass
         #recibir_archivo(server_socket, output_path)

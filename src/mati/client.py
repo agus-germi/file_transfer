@@ -2,29 +2,33 @@ import socket
 import sys
 import os
 import signal
-from utils.udp import Connection, UDPFlags, UDPHeader, MAX_RETRIES, TIMEOUT, send_package, receive_package, close_connection
+from utils.udp import Connection, UDPFlags, UDPHeader, send_package, receive_package, close_connection
 from utils.udp import CloseConnectionException
-from lib.constants import HOST, PORT
+from constants import HOST, PORT, MAX_RETRIES, TIMEOUT
 
 DOWNLOAD = True
+PATH = 'file.txt'
 
 # Crear un socket UDP
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 client_socket.settimeout(TIMEOUT)
 connection = Connection(
-    ip=HOST,
-    socket=PORT,
+    addr=(HOST, PORT),
     client_sequence=0,
-    server_sequence=0
+    server_sequence=0,
+    download=DOWNLOAD,
+    upload=not DOWNLOAD,
+    path = PATH
 )
 
 def connect_server():
     header = UDPHeader(0, connection.client_sequence, 0, 0)
     header.set_flag(UDPFlags.START)
-    header.set_flag(UDPFlags.DOWNLOAD if DOWNLOAD else UDPFlags.UPLOAD)
+    if DOWNLOAD:
+        header.set_flag(UDPFlags.DOWNLOAD)
 
     try:
-        send_package(client_socket, connection, header, b"")
+        send_package(client_socket, connection, header, PATH.encode())
         addr, header, data = receive_package(client_socket)
 
         if header.has_ack() and header.has_start() and header.server_sequence == 0:
