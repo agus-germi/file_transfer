@@ -9,3 +9,6 @@ HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
 
 HOST = 'localhost'
 PORT = 8088
+
+PATH = 'file.txt'
+STORAGE = 'storage'

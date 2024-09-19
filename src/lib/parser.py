@@ -14,7 +14,6 @@ def add_verbosity_args(parser):
         '-q', '--quiet', action='store_true', help='decrease output verbosity'
     )
 
-
 def add_network_args(parser):
     parser.add_argument(
         '-H', '--host', required=True, help='server IP address'

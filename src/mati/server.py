@@ -3,9 +3,8 @@ import sys
 import os
 import signal
 from utils.udp import Connection, UDPFlags, UDPHeader, send_package, receive_package,  reject_connection
-from constants import HOST, PORT, TIMEOUT
+from constants import HOST, PORT, TIMEOUT, STORAGE
 
-STORAGE = 'storage'
 
 connections = {}
 

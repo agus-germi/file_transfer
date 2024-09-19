@@ -4,10 +4,9 @@ import os
 import signal
 from utils.udp import Connection, UDPFlags, UDPHeader, send_package, receive_package, close_connection
 from utils.udp import CloseConnectionException
-from constants import HOST, PORT, MAX_RETRIES, TIMEOUT
+from constants import HOST, PORT, MAX_RETRIES, TIMEOUT, PATH
 
 DOWNLOAD = True
-PATH = 'file.txt'
 
 # Crear un socket UDP
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -26,7 +25,6 @@ def connect_server():
     header.set_flag(UDPFlags.START)
     if DOWNLOAD:
         header.set_flag(UDPFlags.DOWNLOAD)
-
     try:
         send_package(client_socket, connection, header, PATH.encode())
         addr, header, data = receive_package(client_socket)
