@@ -92,8 +92,9 @@ def handle_connection(server_socket):
         if not connections.get(addr):
             check_connection(server_socket, addr, header, data)
             return None
-        
+
         connection = connections.get(addr)
+
         # No se inicializo la conexion y se recibio un paquete de datos
         if header.has_flag(UDPFlags.DATA) and not connection.started:
             close_connection(server_socket, connection)

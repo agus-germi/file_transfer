@@ -5,6 +5,7 @@ import signal
 from lib.udp import Connection, UDPFlags, UDPHeader, send_package, receive_package, close_connection
 from lib.udp import CloseConnectionException 
 from lib.constants import TIMEOUT, HOST, PORT, PATH, MAX_RETRIES
+from lib.parser import parse_upload_args, configure_logging
 
 
 DOWNLOAD = True
@@ -22,6 +23,8 @@ connection = Connection(
 )
 
 def connect_server():
+    # This function tries to establish a connection with the server.
+    
     header = UDPHeader(0, connection.client_sequence, 0, 0)
     header.set_flag(UDPFlags.START)
     if DOWNLOAD:
@@ -30,9 +33,12 @@ def connect_server():
         send_package(client_socket, connection, header, PATH.encode())
         addr, header, data = receive_package(client_socket)
 
+        # si se recibio un header con ack, start y server_sequence = 0
         if header.has_ack() and header.has_start() and header.server_sequence == 0:
+            #le mandamos un ack
             header.set_flag(UDPFlags.ACK)
             send_package(client_socket, connection, header, b"")
+            
             print("Conexión establecida con el servidor.")
             return True
         else:
@@ -105,6 +111,9 @@ def limpiar_recursos(signum, frame):
 
 
 if __name__ == '__main__':
+    args = parse_upload_args()
+    logger = configure_logging(args)
+
     # Capturo señales de interrupción
     signal.signal(signal.SIGINT, limpiar_recursos)  # Ctrl+C
     signal.signal(signal.SIGTERM, limpiar_recursos)  # kill
