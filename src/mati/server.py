@@ -2,7 +2,7 @@ import socket
 import sys
 import os
 import signal
-from utils.udp import Connection, UDPFlags, UDPHeader, send_package, receive_package,  reject_connection
+from utils.udp import Connection, UDPFlags, UDPHeader, send_package, receive_package,  reject_connection, close_connection, send_ack
 from constants import HOST, PORT, TIMEOUT, STORAGE
 
 
@@ -75,7 +75,7 @@ def check_connection(server_socket, addr, header: UDPHeader, data: bytes):
             download=header.has_download(),
             path=data.decode()
         )
-    print("Path: ", data.decode())
+    print("Path: ", data.decode(), "| Upload: ", connection.upload, "| Download: ", connection.download)
     # TODO Set path
     if header.has_start() and header.client_sequence == 0 and data.decode() != "":
         handle_handshake(server_socket, connection)
@@ -96,23 +96,18 @@ def handle_connection(server_socket):
         connection = connections.get(addr)
         # No se inicializo la conexion y se recibio un paquete de datos
         if header.has_flag(UDPFlags.DATA) and not connection.started:
-            header = UDPHeader(0, header.client_sequence, 0, 0)
-            header.set_flag(UDPFlags.CLOSE)
-            send_package(server_socket, connections.get(addr), header, b"")
-            print("Cliente Desconectado: ", addr)
+            close_connection(server_socket, connection)
         # Se recibio un paquete de cierre
         elif header.has_flag(UDPFlags.CLOSE):
-            connections.remove(addr)
+            connections.pop(addr)
             # TODO Habria que cerrar desde el server?
             print("Cliente Desconectado: ", addr)
         else:
-            print(data)
-            header = UDPHeader(0, header.client_sequence, 0, 0)
-            header.set_flag(UDPFlags.ACK)
-            send_package(server_socket, connections.get(addr), header, b"")
+            # Solo para stop and wait
+            if header.has_flag(UDPFlags.DATA):
+                connection.client_sequence = header.client_sequence
+                send_ack(server_socket, connection)
             # TODO Hasta aca se ha establecido la conexión, manejar el resto de las cosas
-            pass
-        #recibir_archivo(server_socket, output_path)
     except ConnectionResetError:
         print("Error: Conexión rechazada por el cliente.")
 
