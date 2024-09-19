@@ -1,5 +1,5 @@
 import argparse  # https://docs.python.org/es/3/library/argparse.html
-from src.lib.logger import setup_logger
+from lib.logger import setup_logger
 
 def configure_logging(args):
     logger = setup_logger(verbose=args.verbose, quiet=args.quiet)

@@ -1,4 +1,3 @@
-
 import struct
 import socket
 import threading
@@ -148,6 +147,13 @@ class CloseConnectionException(Exception):
 
 def send_package(socket: socket.socket, connection: Connection, header, data):
 	package = UDPPackage().pack(header, data)
+	socket.sendto(package, connection.addr)
+
+
+def send_ack(socket: socket.socket, connection: Connection):
+	header = UDPHeader(0, connection.client_sequence, 0, 0)
+	header.set_flag(UDPFlags.ACK)
+	package = UDPPackage().pack(header, b"")
 	socket.sendto(package, connection.addr)
 
 

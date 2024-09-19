@@ -1,9 +1,50 @@
-import argparse
 import socket
+import sys
+import os
+import signal
+from utils.udp import Connection, UDPFlags, UDPHeader, send_package, receive_package,  reject_connection, close_connection, send_ack
+from constants import HOST, PORT, TIMEOUT, STORAGE
+
+
+connections = {}
+
+
+def recibir_archivo(server_socket, output_path):
+    """Recibe un archivo en fragmentos desde un cliente usando UDP."""
+    fragment_size = 512  # Tamaño del fragmento en bytes
+    received_fragments = {}
+    
+    while True:
+        data, addr = server_socket.recvfrom(fragment_size + 4)
+        
+        if data == b'END':  # Señal de que el cliente completo el envio del archivo
+            print("Recepción de archivo completada.")
+            break
+        
+        sequence_number = int.from_bytes(data[:4], 'big')
+        fragment = data[4:]
+        
+        if sequence_number in received_fragments:
+            print(f"Fragmento {sequence_number} ya recibido.")
+            continue
+        
+        # Guardo el fragmento en el diccionario
+        received_fragments[sequence_number] = fragment
+        
+        # Envio confirmación al cliente
+        server_socket.sendto(b'ACK', addr)
+
+    # Escribo el archivo reconstruido
+    with open(output_path, 'wb') as f:
+        for i in sorted(received_fragments.keys()):
+            f.write(received_fragments[i])
+    print("Archivo recibido y guardado exitosamente.")
+
 
 def limpiar_recursos(signum, frame):
     print(f"Recibiendo señal {signum}, limpiando recursos...")
     sys.exit(0)  # Salgo del programa con código 0 (éxito)
+
 
 def handle_handshake(server_socket: socket.socket, connection: Connection):
     header = UDPHeader(0, connection.client_sequence, 0, 0)
@@ -24,6 +65,7 @@ def handle_handshake(server_socket: socket.socket, connection: Connection):
     finally:
         server_socket.settimeout(None)
 
+
 def check_connection(server_socket, addr, header: UDPHeader, data: bytes):
     connection = Connection(
             addr=addr,
@@ -33,7 +75,7 @@ def check_connection(server_socket, addr, header: UDPHeader, data: bytes):
             download=header.has_download(),
             path=data.decode()
         )
-    print("Path: ", data.decode())
+    print("Path: ", data.decode(), "| Upload: ", connection.upload, "| Download: ", connection.download)
     # TODO Set path
     if header.has_start() and header.client_sequence == 0 and data.decode() != "":
         handle_handshake(server_socket, connection)
@@ -41,45 +83,40 @@ def check_connection(server_socket, addr, header: UDPHeader, data: bytes):
         reject_connection(server_socket, connection)
 
 
-connections = {}
 
 def handle_connection(server_socket):
     try:
         addr, header, data = receive_package(server_socket)
         print("Cliente Recibido: ", addr)
 
-        # si no hay conexion, hace el chequeo
         if not connections.get(addr):
             check_connection(server_socket, addr, header, data)
             return None
+        
         connection = connections.get(addr)
-
         # No se inicializo la conexion y se recibio un paquete de datos
-        if header.has_flag(UDPFlags.DATA) and not connection.started: 
-            header = UDPHeader(0, header.client_sequence, 0, 0)
-            header.set_flag(UDPFlags.CLOSE)
-            send_package(server_socket, connections.get(addr), header, b"")
-            print("Cliente Desconectado: ", addr)
-
+        if header.has_flag(UDPFlags.DATA) and not connection.started:
+            close_connection(server_socket, connection)
         # Se recibio un paquete de cierre
         elif header.has_flag(UDPFlags.CLOSE):
-            connections.remove(addr)
+            connections.pop(addr)
             # TODO Habria que cerrar desde el server?
             print("Cliente Desconectado: ", addr)
         else:
-            print(data)
-            header = UDPHeader(0, header.client_sequence, 0, 0)
-            header.set_flag(UDPFlags.ACK)
-            send_package(server_socket, connections.get(addr), header, b"")
+            # Solo para stop and wait
+            if header.has_flag(UDPFlags.DATA):
+                connection.client_sequence = header.client_sequence
+                send_ack(server_socket, connection)
             # TODO Hasta aca se ha establecido la conexión, manejar el resto de las cosas
-            pass
-        #recibir_archivo(server_socket, output_path)
     except ConnectionResetError:
         print("Error: Conexión rechazada por el cliente.")
 
 
-
 def start_server():
+    # args = parse_server_args()
+    # logger = configure_logging(args)
+    # logger.info(f"Starting server {args.host}:{args.port}")
+    
     # Creo un socket UDP
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     server_address = (HOST, PORT)
@@ -93,8 +130,7 @@ def start_server():
         print("\nInterrupción detectada. El programa ha sido detenido.")
 
 
-
-def main():
+if __name__ == '__main__':
     # Capturo señales de interrupción
     signal.signal(signal.SIGINT, limpiar_recursos)  # Ctrl+C
     signal.signal(signal.SIGTERM, limpiar_recursos)  # kill
@@ -104,16 +140,7 @@ def main():
         signal.signal(signal.SIGABRT, limpiar_recursos)  # abort
         signal.signal(signal.SIGHUP, limpiar_recursos)  # hangup
     
-    args = parse_server_args()
-    logger = configure_logging(args)
-    logger.info(f"Starting server {args.host}:{args.port}")
-    
     start_server()
-
-
-if __name__ == "__main__":
-    main()
-
 
 
 

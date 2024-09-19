@@ -22,7 +22,8 @@ El cliente le manda el init al servidor,
 y espera a que el servidor le empiece a mandar cosas -> DOWNLOAD
 
 
-
+## COSAS POR HACER:
+- Ver como configurar el tema de la perdida de paquetes
 
 
 
