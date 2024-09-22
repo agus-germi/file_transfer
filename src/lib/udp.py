@@ -2,6 +2,8 @@ import struct
 import socket
 import threading
 import queue
+import os
+from lib.constants import TIMEOUT, FRAGMENT_SIZE
 
 
 class UDPHeader:
@@ -38,6 +40,9 @@ class UDPHeader:
 
 	def has_ack(self):
 		return self.has_flag(UDPFlags.ACK)
+	
+	def has_data(self):
+		return self.has_flag(UDPFlags.DATA)
 	
 	def has_start(self):
 		return self.has_flag(UDPFlags.START)
@@ -88,34 +93,48 @@ class UDPFlags:
 ## Quedo a medias
 class ClientConnection(threading.Thread):
 	"""Clase que maneja la conexión y comunicación con un cliente específico en UDP."""
-	def __init__(self, server_socket, addr):
+	def __init__(self, socket: socket.socket, addr, path, download=False, upload=False, protocol = ""):
 		super().__init__()
-		self.server_socket = server_socket
+		self.socket = socket
 		self.ip = addr[0]
 		self.port = addr[1]
 		self.addr = addr
+		self.storage = ''
+		self.path = path
 		self.message_queue = queue.Queue()
-		self.is_active = True
+		self.is_active = False
+		self.sequence = 0
+		self.client_sequence = 0
+		self.download = download
+		self.upload = upload
+		self.fragments = {}
+
 
 	def __repr__(self):
 		return f"Cliente ({self.addr})"
+
 
 	def run(self):
 		"""Método principal del hilo: Maneja la comunicación con el cliente."""
 		while self.is_active:
 			try:
 				# Obtener mensaje del cliente desde su cola
-				message = self.message_queue.get(timeout=10)
+				message = self.message_queue.get(timeout=5)
 				
-				if message == b'END':
+				if message["header"].has_close():
 					print(f"Cliente {self} finalizó la conexión.")
 					self.is_active = False
 					break
-				
-				# Procesar y responder al cliente
-				print(f"Recibido desde {self}: {message.decode()}")
-				self.server_socket.sendto(b'ACK', (self.ip, self.port))
-			
+				elif message["header"].has_data():
+					if message["header"].client_sequence in self.fragments:
+						print(f"Fragmento {message["header"].client_sequence} ya recibido.")
+						continue
+
+					self.client_sequence = message["header"].client_sequence
+					print(f"Recibido desde {self}: [{self.client_sequence}]: {message["data"].decode()}")
+					self.fragments[self.client_sequence] = message["data"]
+					send_ack(self.socket, self)
+
 			except queue.Empty:
 				print(f"Cliente {self.addr} no ha enviado mensajes recientes.")
 				continue
@@ -125,6 +144,43 @@ class ClientConnection(threading.Thread):
 			except Exception as e:
 				print(f"Error inesperado con {self.addr}: {e}")
 				self.is_active = False
+
+
+
+	def handle_handshake(self):
+		try:
+			#time.sleep(3)
+			send_confirmation(self.socket, self)
+			self.socket.settimeout(TIMEOUT)
+			addr, header, data = receive_package(self.socket)
+			if header.has_ack() and header.has_start():
+				self.is_active = True
+				print("Cliente Inicializado ", self.addr)
+				# TODO Deberia cerrar conexion si no?
+		except:
+			print("Cliente Rechazado: ", self.addr)
+		finally:
+			self.socket.settimeout(None)
+
+
+	def put_message(self, message):
+		"""Agrega un mensaje a la cola para que sea procesado por el hilo."""
+		self.message_queue.put(message)
+		#print(f"Mensaje enviado a {self.addr}: {message}")
+
+	
+	def save_file(self):
+		output_path = os.path.join(self.storage + self.path)
+		output_path = f"{self.storage}/{self.path}"
+		if not os.path.exists(self.storage):
+			os.makedirs(self.storage)
+			
+		print(self.path)
+		print(output_path)
+		with open(output_path, 'wb') as f:
+			for i in sorted(self.fragments.keys()):
+				f.write(self.fragments[i])
+		print("Archivo recibido y guardado exitosamente.")
 	
 
 
@@ -152,6 +208,21 @@ def send_package(socket: socket.socket, connection: Connection, header, data):
 
 def send_ack(socket: socket.socket, connection: Connection):
 	header = UDPHeader(0, connection.client_sequence, 0, 0)
+	header.set_flag(UDPFlags.ACK)
+	package = UDPPackage().pack(header, b"")
+	socket.sendto(package, connection.addr)
+
+
+def send_end(socket: socket.socket, connection: Connection):
+	header = UDPHeader(0, connection.client_sequence, 0, 0)
+	header.set_flag(UDPFlags.END)
+	package = UDPPackage().pack(header, b"")
+	socket.sendto(package, connection.addr)
+
+
+def send_confirmation(socket: socket.socket, connection: Connection):
+	header = UDPHeader(0, connection.client_sequence, 0, 0)
+	header.set_flag(UDPFlags.START)
 	header.set_flag(UDPFlags.ACK)
 	package = UDPPackage().pack(header, b"")
 	socket.sendto(package, connection.addr)

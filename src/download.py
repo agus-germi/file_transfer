@@ -3,7 +3,7 @@ import sys
 import os
 import signal
 from lib.parser import parse_download_args
-from lib.udp import Connection, UDPFlags, UDPHeader, send_package, receive_package, close_connection
+from lib.udp import Connection, UDPFlags, UDPHeader, send_package, receive_package, close_connection, send_end
 from lib.udp import CloseConnectionException
 from lib.constants import MAX_RETRIES, TIMEOUT, FRAGMENT_SIZE
 
@@ -140,6 +140,8 @@ if __name__ == '__main__':
         try:
             if DOWNLOAD:
                 send_data_stop_and_wait()
+                send_end(client_socket, connection)
+                close_connection(client_socket, connection)
         except CloseConnectionException as e:
             print(e)
         finally:
