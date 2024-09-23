@@ -93,21 +93,19 @@ class UDPFlags:
 ## Quedo a medias
 class ClientConnection(threading.Thread):
 	"""Clase que maneja la conexión y comunicación con un cliente específico en UDP."""
-	def __init__(self, socket: socket.socket, addr, path, download=False, upload=False, protocol = ""):
+	def __init__(self, socket: socket.socket, addr, path, download=False, protocol = ""):
 		super().__init__()
 		self.socket = socket
-		self.ip = addr[0]
-		self.port = addr[1]
-		self.addr = addr
-		self.storage = ''
-		self.path = path
-		self.message_queue = queue.Queue()
 		self.is_active = False
+		self.addr = addr
+		self.path = path
+		self.message_queue = queue.Queue()		
 		self.sequence = 0
 		self.client_sequence = 0
 		self.download = download
-		self.upload = upload
+		self.upload = not download
 		self.fragments = {}
+		self.ttl = 0
 
 
 	def __repr__(self):
@@ -115,28 +113,28 @@ class ClientConnection(threading.Thread):
 
 
 	def run(self):
-		"""Método principal del hilo: Maneja la comunicación con el cliente."""
+		if self.download:
+			self.get_fragments()
+
 		while self.is_active:
 			try:
 				# Obtener mensaje del cliente desde su cola
 				message = self.message_queue.get(timeout=5)
-				
-				if message["header"].has_close():
-					print(f"Cliente {self} finalizó la conexión.")
-					self.is_active = False
-					break
-				elif message["header"].has_data():
-					if message["header"].client_sequence in self.fragments:
-						print(f"Fragmento {message["header"].client_sequence} ya recibido.")
-						continue
 
-					self.client_sequence = message["header"].client_sequence
-					print(f"Recibido desde {self}: [{self.client_sequence}]: {message["data"].decode()}")
-					self.fragments[self.client_sequence] = message["data"]
-					send_ack(self.socket, self)
+				if self.upload:
+					if message["header"].has_data():						
+						self.receive_data(message)
+				else:
+					self.send_data(message)
+					
 
 			except queue.Empty:
 				print(f"Cliente {self.addr} no ha enviado mensajes recientes.")
+				if self.ttl >= 5:
+					# TODO Join de thread
+					print(f"Cliente {self.addr} inactivo por 5 intentos.")
+					self.is_active = False
+				self.ttl += 1
 				continue
 			except ConnectionResetError as e:
 				print(f"Error de conexión con {self.addr}: {e}")
@@ -145,6 +143,39 @@ class ClientConnection(threading.Thread):
 				print(f"Error inesperado con {self.addr}: {e}")
 				self.is_active = False
 
+
+	def receive_data(self, message):
+		# Verificar si el fragmento ya fue recibido
+		if message["header"].client_sequence in self.fragments:
+			print(f"Fragmento {message["header"].client_sequence} ya recibido.")
+			send_ack(self.socket, self, message["header"].client_sequence)
+			return None
+
+		# Fragmento NUEVO
+		self.client_sequence = message["header"].client_sequence
+		print(f"Recibido desde {self}: [{self.client_sequence}]")
+		self.fragments[self.client_sequence] = message["data"]
+		send_ack(self.socket, self)
+
+
+	def send_data(self, message):
+		if message["header"].has_ack():
+			sequence = message["header"].client_sequence
+			print(f"ACK {sequence} recibido desde {self}")
+			self.fragments.pop(sequence)
+		if len(self.fragments) > 0:
+			key = next(iter(self.fragments))
+			data = self.fragments[key].encode()
+			send_data(self.socket, self, data, sequence=key)
+			print("Send data ", key)
+
+
+
+	def get_fragments(self):
+		i = 0
+		with open(self.path, 'rb') as f:
+			for i, fragment in enumerate(iter(lambda: f.read(FRAGMENT_SIZE), b'')):
+				self.fragments[i] = fragment
 
 
 	def handle_handshake(self):
@@ -170,10 +201,10 @@ class ClientConnection(threading.Thread):
 
 	
 	def save_file(self):
-		output_path = os.path.join(self.storage + self.path)
-		output_path = f"{self.storage}/{self.path}"
-		if not os.path.exists(self.storage):
-			os.makedirs(self.storage)
+		output_path = self.path
+		dir = self.path.split("/")[0]
+		if not os.path.exists(dir):
+			os.makedirs(dir)
 			
 		print(self.path)
 		print(output_path)
@@ -206,8 +237,17 @@ def send_package(socket: socket.socket, connection: Connection, header, data):
 	socket.sendto(package, connection.addr)
 
 
-def send_ack(socket: socket.socket, connection: Connection):
-	header = UDPHeader(0, connection.client_sequence, 0, 0)
+def send_data(socket: socket.socket, connection: Connection, data: bytes, sequence=None):
+	seq = sequence if sequence else connection.client_sequence
+	header = UDPHeader(0, seq, 0, 0)
+	header.set_flag(UDPFlags.DATA)
+	package = UDPPackage().pack(header, data)
+	socket.sendto(package, connection.addr)
+
+
+def send_ack(socket: socket.socket, connection: Connection, sequence=None):
+	seq = sequence if sequence else connection.client_sequence
+	header = UDPHeader(0, seq, 0, 0)
 	header.set_flag(UDPFlags.ACK)
 	package = UDPPackage().pack(header, b"")
 	socket.sendto(package, connection.addr)

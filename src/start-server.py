@@ -41,23 +41,21 @@ def start_server():
 	# Crear un socket UDP
 	server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 	server_address = (args.host, args.port)  # Usa los argumentos parseados
-	server_storage = args.storage
 	server_socket.bind(server_address)
-	print(f"Servidor escuchando en {server_address} con almacenamiento en {server_storage}")
+	print(f"Servidor escuchando en {server_address} con almacenamiento en {args.storage}")
 	try:
 		while True:
-			handle_connection(server_socket, server_storage)
+			handle_connection(server_socket, args.storage)
 	except KeyboardInterrupt:
 		server_socket.close()
 		print("\nInterrupción detectada. El programa ha sido detenido.")
 
 
-def check_connection(server_socket, addr, header: UDPHeader, data: bytes):
+def check_connection(server_socket, addr, header: UDPHeader, data: bytes, storage_dir: str):
 	connection = ClientConnection(
 		server_socket,
 		addr,
-		data.decode(),
-		upload= not header.has_download(),
+		f"{storage_dir}/{data.decode()}",
 		download=header.has_download(),
 	)
 
@@ -73,12 +71,12 @@ def check_connection(server_socket, addr, header: UDPHeader, data: bytes):
 
 
 
-def handle_connection(server_socket, server_storage):
+def handle_connection(server_socket, storage_dir):
 	try:
 		addr, header, data = receive_package(server_socket)		
 
 		if not connections.get(addr):
-			check_connection(server_socket, addr, header, data)
+			check_connection(server_socket, addr, header, data, storage_dir)
 			return None
 		
 		connection = connections.get(addr)
@@ -88,6 +86,7 @@ def handle_connection(server_socket, server_storage):
 			connection.join()
 			close_connection(server_socket, connection)
 			connections.pop(addr)
+
 		# Se recibio un paquete de cierre
 		elif header.has_flag(UDPFlags.CLOSE):
 			print("Mensaje Recibido: ", addr, " [Close]")
@@ -99,7 +98,6 @@ def handle_connection(server_socket, server_storage):
 		elif header.has_flag(UDPFlags.END):
 			print("Mensaje Recibido: ", addr, " [End]")
 			print("Cliente: ", addr, " recepcion archivo completada.")
-			connection.storage = server_storage
 			connection.save_file()
 		else:
 			print("Mensaje Recibido: ", addr)

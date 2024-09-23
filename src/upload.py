@@ -3,7 +3,7 @@ import sys
 import os
 import signal
 from lib.parser import parse_upload_args, configure_logging
-from lib.udp import Connection, UDPFlags, UDPHeader, send_package, receive_package, close_connection
+from lib.udp import Connection, UDPFlags, UDPHeader, send_package, receive_package, close_connection, send_data, send_end
 from lib.udp import CloseConnectionException
 from lib.constants import MAX_RETRIES, TIMEOUT, FRAGMENT_SIZE
 
@@ -25,6 +25,7 @@ DOWNLOAD = False
 
 # Parsear los argumentos usando la función importada
 args = parse_upload_args()
+logger = configure_logging(args)
 
 # Configurar la verbosidad (ejemplo de uso de verbosity)
 if args.verbose:
@@ -41,6 +42,7 @@ connection = Connection(
 	upload=UPLOAD,
 	path = args.name
 )
+
 
 def connect_server():
 	header = UDPHeader(0, connection.client_sequence, 0, 0)
@@ -66,74 +68,19 @@ def connect_server():
 		return False
 
 
-def send_data_stop_and_wait():
-	for i in range(1, 6):
-		data = f"Mensaje {i}".encode()
-		header = UDPHeader(0, connection.client_sequence, 0, len(data))
-		header.set_flag(UDPFlags.DATA)
-
-		ack_received = False
-		retry_count = 0
-
-		while not ack_received and retry_count < MAX_RETRIES:
-			try:
-				send_package(client_socket, connection, header, data)
-				print(f"Mensaje {i} enviado al servidor. Intento {retry_count + 1}.")
-				addr, header, data = receive_package(client_socket)
-
-				if header.has_close():
-					raise CloseConnectionException("El servidor cerró la conexión.", 1)
-				# Verificar si se recibió el ACK
-				if header.has_ack() and header.client_sequence == connection.client_sequence:
-					connection.client_sequence += 1
-					print(f"ACK {i} recibido del servidor.")
-					ack_received = True  # Salir del bucle si se recibió el ACK
-				else:
-					print(f"Error: ACK {i} no recibido correctamente.")
-					retry_count += 1
-
-			except socket.timeout:
-				# Si no se recibe el ACK dentro del timeout
-				retry_count += 1
-				print(f"Timeout: No se recibió ACK {i}, reintentando ({retry_count}/{MAX_RETRIES})...")
-		
-		if not ack_received:
-			print(f"Error: ACK {i} no se recibió después de {MAX_RETRIES} intentos.")
-			close_connection(client_socket, connection)
-			break  # Terminar el bucle si no se recibe el ACK después de varios intentos
-
-
-def send_data():
-	for i in range(1, 6):
-		data = f"Mensaje {i}".encode()
-		header = UDPHeader(0, connection.client_sequence, 0, len(data))
-		header.set_flag(UDPFlags.DATA)
-		send_package(client_socket, connection, header, data)
-		print(f"Mensaje {i} enviado al servidor.")
-		addr, header, data = receive_package(client_socket)
-		if header.has_ack() and header.client_sequence == connection.client_sequence:
-			connection.client_sequence += 1
-			print(f"ACK {i} recibido del servidor.")
-		else:
-			print(f"Error: ACK {i} no recibido del servidor.")
-			break
-
-def enviar_archivo(client_socket, archivo_path, server_address):
+def upload_file(dir, name):
 	"""Envía un archivo al servidor en fragmentos usando UDP."""
-	fragment_size = FRAGMENT_SIZE  # Tamaño del fragmento en bytes
-	
+
+	file_dir = f"{dir}/{name}"
 	connection.client_sequence = 0
-	with open(archivo_path, 'rb') as f:
+	with open(file_dir, 'rb') as f:
 		while True:
-			fragment = f.read(fragment_size)
+			fragment = f.read(FRAGMENT_SIZE)
 			if not fragment:
 				break
 
-			# Enviar fragmento de tamaño definido con su número de secuencia
-			header = UDPHeader(0, connection.client_sequence, 0, len(fragment))
-			header.set_flag(UDPFlags.DATA)
+			send_data(client_socket, connection, fragment, sequence=connection.client_sequence)
 
-			send_package(client_socket, connection, header, fragment)
 			print(f"Fragmento {connection.client_sequence} enviado al servidor. Con Data {fragment}")
 
 			addr, header, data = receive_package(client_socket)
@@ -148,9 +95,8 @@ def enviar_archivo(client_socket, archivo_path, server_address):
 				print(f"Error: ACK {connection.client_sequence} no recibido del servidor.")
 				break
 		
-		header.set_flag(UDPFlags.END)
-		header.clear_flag(UDPFlags.DATA)
-		send_package(client_socket, connection, header, fragment)
+		send_end(client_socket, connection)
+		close_connection(client_socket, connection)
 		print("Archivo enviado exitosamente.")
 
 
@@ -161,9 +107,6 @@ def limpiar_recursos(signum, frame):
 
 
 if __name__ == '__main__':
-	args = parse_upload_args()
-	logger = configure_logging(args)
-
 	# Capturo señales de interrupción
 	signal.signal(signal.SIGINT, limpiar_recursos)  # Ctrl+C
 	signal.signal(signal.SIGTERM, limpiar_recursos)  # kill
@@ -176,7 +119,7 @@ if __name__ == '__main__':
 	if connect_server():
 		try:
 			if UPLOAD:
-				enviar_archivo(client_socket, args.src, connection.addr)
+				upload_file(args.src, args.name)
 		except CloseConnectionException as e:
 			print(e)
 		finally:
