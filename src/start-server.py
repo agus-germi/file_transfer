@@ -83,7 +83,7 @@ def handle_connection(server_socket, storage_dir):
 		# No se inicializo la conexion y se recibio un paquete de datos
 		if header.has_flag(UDPFlags.DATA) and not connection.is_active:
 			connection.is_active = False
-			connection.join()
+			connection.join() # Para cerrar el thread de la conexion
 			close_connection(server_socket, connection)
 			connections.pop(addr)
 
@@ -94,6 +94,7 @@ def handle_connection(server_socket, storage_dir):
 			connection.join()
 			connections.pop(addr)
 			# TODO Habria que cerrar desde el server?
+			# Si se pierde el paquete este -> El server por ttl sabe que tiene que cerrar esta conexion
 			print("Cliente Desconectado: ", addr)
 		elif header.has_flag(UDPFlags.END):
 			print("Mensaje Recibido: ", addr, " [End]")
@@ -118,6 +119,7 @@ if __name__ == '__main__':
 		signal.signal(signal.SIGABRT, limpiar_recursos)  # abort
 		signal.signal(signal.SIGHUP, limpiar_recursos)  # hangup
 	
+	# TODO Si no existe el archivo habria que avisarle al cliente
 	start_server()
 
 

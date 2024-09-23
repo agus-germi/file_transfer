@@ -70,10 +70,11 @@ def connect_server():
 def upload_file(dir, name):
 	"""Envía un archivo al servidor en fragmentos usando UDP."""
 
+	# TODO Deberia reenviar en caso que no llegue ACK del server
 	file_dir = f"{dir}/{name}"
 	connection.sequence = 0
 	with open(file_dir, 'rb') as f:
-		while True:
+		while True: # TODO While true NO DEBERIA ESTAR
 			fragment = f.read(FRAGMENT_SIZE)
 			if not fragment:
 				break

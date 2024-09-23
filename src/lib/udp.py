@@ -89,7 +89,6 @@ class UDPFlags:
 	DOWNLOAD = 0b01000000
 
 
-## Quedo a medias
 class ClientConnection(threading.Thread):
 	"""Clase que maneja la conexión y comunicación con un cliente específico en UDP."""
 	def __init__(self, socket: socket.socket, addr, path, download=False, protocol = ""):
@@ -120,7 +119,7 @@ class ClientConnection(threading.Thread):
 				message = self.message_queue.get(timeout=5)
 
 				if self.upload:
-					if message["header"].has_data():						
+					if message["header"].has_data():
 						self.receive_data(message)
 				else:
 					self.send_data(message)
@@ -163,10 +162,14 @@ class ClientConnection(threading.Thread):
 			self.fragments.pop(sequence)
 		if len(self.fragments) > 0:
 			key = next(iter(self.fragments))
-			data = self.fragments[key].encode()
+			data = self.fragments[key].encode() # TODO Si es una imagen, ya viene en bytes?
 			send_data(self.socket, self, data, sequence=key)
 			print("Send data ", key)
-
+		else:
+			send_end(self.socket, self)
+			self.is_active = False
+			# TODO Que pasa si se pierde el paquete de end?
+			
 
 
 	def get_fragments(self):
