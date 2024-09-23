@@ -14,8 +14,7 @@ client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 client_socket.settimeout(TIMEOUT)
 connection = Connection(
     addr=(HOST, PORT),
-    client_sequence=0,
-    server_sequence=0,
+    sequence=0,
     download=DOWNLOAD,
     upload=not DOWNLOAD,
     path = PATH
@@ -25,7 +24,7 @@ connection = Connection(
 def connect_server():
     # This function tries to establish a connection with the server.
     
-    header = UDPHeader(0, connection.client_sequence, 0, 0)
+    header = UDPHeader(0, connection.sequence, 0)
     header.set_flag(UDPFlags.START)
     if DOWNLOAD:
         header.set_flag(UDPFlags.DOWNLOAD)
@@ -33,8 +32,8 @@ def connect_server():
         send_package(client_socket, connection, header, PATH.encode())
         addr, header, data = receive_package(client_socket)
 
-        # si se recibio un header con ack, start y server_sequence = 0
-        if header.has_ack() and header.has_start() and header.server_sequence == 0:
+        # si se recibio un header con ack, start y sequence = 0
+        if header.has_ack() and header.has_start() and header.sequence == 0:
             #le mandamos un ack
             header.set_flag(UDPFlags.ACK)
             send_package(client_socket, connection, header, b"")

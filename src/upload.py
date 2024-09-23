@@ -36,8 +36,7 @@ client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 client_socket.settimeout(TIMEOUT)
 connection = Connection(
 	addr=(args.host, args.port),  # Usa los argumentos parseados
-	client_sequence=0,
-	server_sequence=0,
+	sequence=0,
 	download=DOWNLOAD,
 	upload=UPLOAD,
 	path = args.name
@@ -45,7 +44,7 @@ connection = Connection(
 
 
 def connect_server():
-	header = UDPHeader(0, connection.client_sequence, 0, 0)
+	header = UDPHeader(0, connection.sequence, 0)
 	header.set_flag(UDPFlags.START)
 	if DOWNLOAD:
 		header.set_flag(UDPFlags.DOWNLOAD)
@@ -53,7 +52,7 @@ def connect_server():
 		send_package(client_socket, connection, header, connection.path.encode())
 		addr, header, data = receive_package(client_socket)
 
-		if header.has_ack() and header.has_start() and header.server_sequence == 0:
+		if header.has_ack() and header.has_start() and header.sequence == 0:
 			header.set_flag(UDPFlags.ACK)
 			send_package(client_socket, connection, header, b"")
 			print("Conexión establecida con el servidor.")
@@ -72,27 +71,27 @@ def upload_file(dir, name):
 	"""Envía un archivo al servidor en fragmentos usando UDP."""
 
 	file_dir = f"{dir}/{name}"
-	connection.client_sequence = 0
+	connection.sequence = 0
 	with open(file_dir, 'rb') as f:
 		while True:
 			fragment = f.read(FRAGMENT_SIZE)
 			if not fragment:
 				break
 
-			send_data(client_socket, connection, fragment, sequence=connection.client_sequence)
+			send_data(client_socket, connection, fragment, sequence=connection.sequence)
 
-			print(f"Fragmento {connection.client_sequence} enviado al servidor. Con Data {fragment}")
+			print(f"Fragmento {connection.sequence} enviado al servidor. Con Data {fragment}")
 
 			addr, header, data = receive_package(client_socket)
 
-			print(f"Header Client sequence {header.client_sequence}")
-			print(f"Connection Client sequence {connection.client_sequence}")
-			if header.has_ack() and header.client_sequence == connection.client_sequence:
-				print(f"ACK {connection.client_sequence} recibido del servidor.")
-				connection.client_sequence += 1
+			print(f"Header Client sequence {header.sequence}")
+			print(f"Connection Client sequence {connection.sequence}")
+			if header.has_ack() and header.sequence == connection.sequence:
+				print(f"ACK {connection.sequence} recibido del servidor.")
+				connection.sequence += 1
 			
 			else:
-				print(f"Error: ACK {connection.client_sequence} no recibido del servidor.")
+				print(f"Error: ACK {connection.sequence} no recibido del servidor.")
 				break
 		
 		send_end(client_socket, connection)
@@ -118,8 +117,7 @@ if __name__ == '__main__':
 	
 	if connect_server():
 		try:
-			if UPLOAD:
-				upload_file(args.src, args.name)
+			upload_file(args.src, args.name)
 		except CloseConnectionException as e:
 			print(e)
 		finally:

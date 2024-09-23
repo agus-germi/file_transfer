@@ -60,7 +60,7 @@ def check_connection(server_socket, addr, header: UDPHeader, data: bytes, storag
 	)
 
 	print("Path: ", data.decode(), "| Upload: ", connection.upload, "| Download: ", connection.download)
-	if header.has_start() and header.client_sequence == 0 and data.decode() != "":
+	if header.has_start() and header.sequence == 0 and data.decode() != "":
 		print("Mensaje Recibido: ", addr, " [Start]")
 		connection.handle_handshake()
 		if connection.is_active:
@@ -97,7 +97,6 @@ def handle_connection(server_socket, storage_dir):
 			print("Cliente Desconectado: ", addr)
 		elif header.has_flag(UDPFlags.END):
 			print("Mensaje Recibido: ", addr, " [End]")
-			print("Cliente: ", addr, " recepcion archivo completada.")
 			connection.save_file()
 		else:
 			print("Mensaje Recibido: ", addr)

@@ -7,24 +7,23 @@ from lib.constants import TIMEOUT, FRAGMENT_SIZE
 
 
 class UDPHeader:
-	HEADER_FORMAT = '!B I I I'
+	HEADER_FORMAT = '!B I I'
 	HEADER_SIZE = struct.calcsize(HEADER_FORMAT)  # Size of the header in bytes
 
-	def __init__(self, flags, client_sequence, server_sequence, data_length):
+	def __init__(self, flags, sequence, data_length):
 		self.flags = flags  # Flags (1 byte)
-		self.client_sequence = client_sequence  # Sequence number (4 bytes)
-		self.server_sequence = server_sequence  # Sequence number (4 bytes)
+		self.sequence = sequence  # Sequence number (4 bytes)
 		self.data_length = data_length  # Length of the data (4 bytes)
 
 	def pack(self):
 		"""Pack the header into binary format."""
-		return struct.pack(self.HEADER_FORMAT, self.flags, self.client_sequence, self.server_sequence, self.data_length)
+		return struct.pack(self.HEADER_FORMAT, self.flags, self.sequence, self.data_length)
 
 	@classmethod
 	def unpack(cls, binary_header):
 		"""Unpack the binary header and return an instance of ProtocolHeader."""
-		flags, client_sequence, server_sequence, data_length = struct.unpack(cls.HEADER_FORMAT, binary_header)
-		return cls(flags, client_sequence, server_sequence, data_length)
+		flags, sequence, data_length = struct.unpack(cls.HEADER_FORMAT, binary_header)
+		return cls(flags, sequence, data_length)
 	
 	def has_flag(self, flag):
 		"""Checks if the flag is set."""
@@ -101,7 +100,6 @@ class ClientConnection(threading.Thread):
 		self.path = path
 		self.message_queue = queue.Queue()		
 		self.sequence = 0
-		self.client_sequence = 0
 		self.download = download
 		self.upload = not download
 		self.fragments = {}
@@ -146,21 +144,21 @@ class ClientConnection(threading.Thread):
 
 	def receive_data(self, message):
 		# Verificar si el fragmento ya fue recibido
-		if message["header"].client_sequence in self.fragments:
-			print(f"Fragmento {message["header"].client_sequence} ya recibido.")
-			send_ack(self.socket, self, message["header"].client_sequence)
+		if message["header"].sequence in self.fragments:
+			print(f"Fragmento {message["header"].sequence} ya recibido.")
+			send_ack(self.socket, self, message["header"].sequence)
 			return None
 
 		# Fragmento NUEVO
-		self.client_sequence = message["header"].client_sequence
-		print(f"Recibido desde {self}: [{self.client_sequence}]")
-		self.fragments[self.client_sequence] = message["data"]
+		self.sequence = message["header"].sequence
+		print(f"Recibido desde {self}: [{self.sequence}]")
+		self.fragments[self.sequence] = message["data"]
 		send_ack(self.socket, self)
 
 
 	def send_data(self, message):
 		if message["header"].has_ack():
-			sequence = message["header"].client_sequence
+			sequence = message["header"].sequence
 			print(f"ACK {sequence} recibido desde {self}")
 			self.fragments.pop(sequence)
 		if len(self.fragments) > 0:
@@ -206,20 +204,17 @@ class ClientConnection(threading.Thread):
 		if not os.path.exists(dir):
 			os.makedirs(dir)
 			
-		print(self.path)
-		print(output_path)
 		with open(output_path, 'wb') as f:
 			for i in sorted(self.fragments.keys()):
 				f.write(self.fragments[i])
-		print("Archivo recibido y guardado exitosamente.")
+		print("Archivo recibido y guardado exitosamente. ", self.path)
 	
 
 
 class Connection:
-	def __init__(self, addr, client_sequence=None, server_sequence=None, upload = False, download = False, path=None):
+	def __init__(self, addr, sequence=None, upload = False, download = False, path=None):
 		self.addr = addr
-		self.client_sequence = client_sequence
-		self.server_sequence = server_sequence
+		self.sequence = sequence
 		self.started = False
 		self.upload = upload
 		self.download = download
@@ -238,30 +233,30 @@ def send_package(socket: socket.socket, connection: Connection, header, data):
 
 
 def send_data(socket: socket.socket, connection: Connection, data: bytes, sequence=None):
-	seq = sequence if sequence else connection.client_sequence
-	header = UDPHeader(0, seq, 0, 0)
+	seq = sequence if sequence else connection.sequence
+	header = UDPHeader(0, seq, 0)
 	header.set_flag(UDPFlags.DATA)
 	package = UDPPackage().pack(header, data)
 	socket.sendto(package, connection.addr)
 
 
 def send_ack(socket: socket.socket, connection: Connection, sequence=None):
-	seq = sequence if sequence else connection.client_sequence
-	header = UDPHeader(0, seq, 0, 0)
+	seq = sequence if sequence else connection.sequence
+	header = UDPHeader(0, seq, 0)
 	header.set_flag(UDPFlags.ACK)
 	package = UDPPackage().pack(header, b"")
 	socket.sendto(package, connection.addr)
 
 
 def send_end(socket: socket.socket, connection: Connection):
-	header = UDPHeader(0, connection.client_sequence, 0, 0)
+	header = UDPHeader(0, connection.sequence, 0)
 	header.set_flag(UDPFlags.END)
 	package = UDPPackage().pack(header, b"")
 	socket.sendto(package, connection.addr)
 
 
 def send_confirmation(socket: socket.socket, connection: Connection):
-	header = UDPHeader(0, connection.client_sequence, 0, 0)
+	header = UDPHeader(0, connection.sequence, 0)
 	header.set_flag(UDPFlags.START)
 	header.set_flag(UDPFlags.ACK)
 	package = UDPPackage().pack(header, b"")
@@ -275,7 +270,7 @@ def receive_package(socket: socket.socket):
 
 
 def close_connection(socket: socket.socket, connection: Connection):
-	header = UDPHeader(0, 0, 0, 0)
+	header = UDPHeader(0, 0, 0)
 	header.set_flag(UDPFlags.CLOSE)
 	print("Enviando paquete de cierre ", connection.addr)
 	send_package(socket, connection, header, b"")
