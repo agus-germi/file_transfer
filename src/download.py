@@ -2,11 +2,10 @@ import socket
 import sys
 import os
 import signal
-from lib.parser import parse_download_args
-from lib.udp import Connection, UDPFlags, UDPHeader, send_package, receive_package, close_connection, send_end
+from lib.parser import parse_download_args, configure_logging
+from lib.udp import Connection, UDPFlags, UDPHeader, send_package, receive_package, close_connection, send_ack, send_end
 from lib.udp import CloseConnectionException
 from lib.constants import MAX_RETRIES, TIMEOUT, FRAGMENT_SIZE
-
 # > python download -h
 # usage : download [ - h ] [ - v | -q ] [ - H ADDR ] [ - p PORT ] [ - d FILEPATH ] [ - n FILENAME ]
 # < command description >
@@ -22,36 +21,34 @@ from lib.constants import MAX_RETRIES, TIMEOUT, FRAGMENT_SIZE
 UPLOAD = False
 DOWNLOAD = True
 
-# Parsear los argumentos usando la función importada
 args = parse_download_args()
+logger = configure_logging(args)
+
 
 # Configurar la verbosidad (ejemplo de uso de verbosity)
 if args.verbose:
     print("Verbosity turned on")
 
+
 # Crear un socket UDP
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 client_socket.settimeout(TIMEOUT)
 connection = Connection(
-    addr=(args.host, args.port),  # Usa los argumentos parseados
+    addr=(args.host, args.port),
     client_sequence=0,
     server_sequence=0,
     download=DOWNLOAD,
     upload=UPLOAD,
-    path = args.name
+    path=args.name
 )
-    
 
 def connect_server():
-
     header = UDPHeader(0, connection.client_sequence, 0, 0)
     header.set_flag(UDPFlags.START)
-    if DOWNLOAD:
-        header.set_flag(UDPFlags.DOWNLOAD)
+    header.set_flag(UDPFlags.DOWNLOAD)
     try:
         send_package(client_socket, connection, header, connection.path.encode())
         addr, header, data = receive_package(client_socket)
-
         if header.has_ack() and header.has_start() and header.server_sequence == 0:
             header.set_flag(UDPFlags.ACK)
             send_package(client_socket, connection, header, b"")
@@ -66,65 +63,83 @@ def connect_server():
         client_socket.close()
         return False
 
-
-def send_data_stop_and_wait():
-    for i in range(1, 6):
-        data = f"Mensaje {i}".encode()
-        header = UDPHeader(0, connection.client_sequence, 0, len(data))
-        header.set_flag(UDPFlags.DATA)
-
-        ack_received = False
-        retry_count = 0
-
-        while not ack_received and retry_count < MAX_RETRIES:
+def download_file_stop_and_wait(dst_path, file_name):
+    """Recibe un archivo del servidor usando Stop & Wait."""
+    full_path = os.path.join(dst_path, file_name)
+    connection.client_sequence = 0
+    with open(full_path, 'wb') as f:
+        while True:
             try:
-                send_package(client_socket, connection, header, data)
-                print(f"Mensaje {i} enviado al servidor. Intento {retry_count + 1}.")
                 addr, header, data = receive_package(client_socket)
-
-                if header.has_close():
-                    raise CloseConnectionException("El servidor cerró la conexión.", 1)
-                # Verificar si se recibió el ACK
-                if header.has_ack() and header.client_sequence == connection.client_sequence:
+                if header.has_flag(UDPFlags.END):
+                    print("OK.")
+                    break
+                if header.has_data() and header.client_sequence == connection.client_sequence:
+                    print(f"Fragmento {header.client_sequence} recibido del servidor.")
+                    f.write(data)
+                    send_ack(client_socket, connection, sequence=header.client_sequence)
+                    print(f"ACK {header.client_sequence} enviado al servidor.")
                     connection.client_sequence += 1
-                    print(f"ACK {i} recibido del servidor.")
-                    ack_received = True  # Salir del bucle si se recibió el ACK
                 else:
-                    print(f"Error: ACK {i} no recibido correctamente.")
-                    retry_count += 1
+                    print(f"Fragmento fuera de orden o duplicado. Esperado: {connection.client_sequence}, Recibido: {header.client_sequence}")
+                    send_ack(client_socket, connection, sequence=connection.client_sequence - 1)
+            except socket.timeout:
+                print("Timeout: No se recibió el siguiente fragmento.")
+                send_ack(client_socket, connection, sequence=connection.client_sequence - 1)
+
+    send_end(client_socket, connection)
+    close_connection(client_socket, connection)
+    print(f"Archivo guardado exitosamente en {full_path}.")
+
+def download_file_tcp_sack(dst_path, file_name):
+    """Recibe un archivo del servidor usando un mecanismo similar a TCP con SACK."""
+    full_path = os.path.join(dst_path, file_name)
+    connection.client_sequence = 0
+    received_fragments = {}
+    expected_sequence = 0
+    window_size = 5  # Tamaño de la ventana deslizante
+
+    with open(full_path, 'wb') as f:
+        while True:
+            try:
+                for _ in range(window_size):
+                    addr, header, data = receive_package(client_socket)
+                    if header.has_flag(UDPFlags.END):
+                        print("Recepción del archivo completada.")
+                        break
+                    if header.has_data():
+                        print(f"Fragmento {header.client_sequence} recibido del servidor.")
+                        received_fragments[header.client_sequence] = data
+
+                # Procesar fragmentos en orden
+                while expected_sequence in received_fragments:
+                    f.write(received_fragments[expected_sequence])
+                    del received_fragments[expected_sequence]
+                    expected_sequence += 1
+
+                # Enviar SACK
+                sack = [seq for seq in received_fragments.keys() if seq > expected_sequence]
+                send_sack(client_socket, connection, expected_sequence, sack)
+                print(f"SACK enviado. Esperando: {expected_sequence}, Recibidos: {sack}")
 
             except socket.timeout:
-                # Si no se recibe el ACK dentro del timeout
-                retry_count += 1
-                print(f"Timeout: No se recibió ACK {i}, reintentando ({retry_count}/{MAX_RETRIES})...")
-        
-        if not ack_received:
-            print(f"Error: ACK {i} no se recibió después de {MAX_RETRIES} intentos.")
-            close_connection(client_socket, connection)
-            break  # Terminar el bucle si no se recibe el ACK después de varios intentos
+                print("Timeout: No se recibieron todos los fragmentos esperados.")
+                send_sack(client_socket, connection, expected_sequence, list(received_fragments.keys()))
 
+        send_end(client_socket, connection)
+        close_connection(client_socket, connection)
+        print(f"Archivo guardado exitosamente en {full_path}.")
 
-def send_data():
-    for i in range(1, 6):
-        data = f"Mensaje {i}".encode()
-        header = UDPHeader(0, connection.client_sequence, 0, len(data))
-        header.set_flag(UDPFlags.DATA)
-        send_package(client_socket, connection, header, data)
-        print(f"Mensaje {i} enviado al servidor.")
-        addr, header, data = receive_package(client_socket)
-        if header.has_ack() and header.client_sequence == connection.client_sequence:
-            connection.client_sequence += 1
-            print(f"ACK {i} recibido del servidor.")
-        else:
-            print(f"Error: ACK {i} no recibido del servidor.")
-            break
-
-
+def send_sack(socket, connection, expected, received):
+    """Envía un SACK (Selective Acknowledgment) al servidor."""
+    header = UDPHeader(0, connection.client_sequence, 0, 0)
+    header.set_flag(UDPFlags.ACK)
+    sack_data = f"{expected},{','.join(map(str, received))}".encode()
+    send_package(socket, connection, header, sack_data)
 
 def limpiar_recursos(signum, frame):
     print(f"Recibiendo señal {signum}, limpiando recursos...")
-    sys.exit(0)  # Salgo del programa con código 0 (éxito)
-
+    sys.exit(0)
 
 if __name__ == '__main__':
     # Capturo señales de interrupción
@@ -139,9 +154,12 @@ if __name__ == '__main__':
     if connect_server():
         try:
             if DOWNLOAD:
-                send_data_stop_and_wait()
-                send_end(client_socket, connection)
-                close_connection(client_socket, connection)
+                # Elegir entre Stop & Wait y TCP-like SACK
+                use_tcp_sack = True  # Cambiar a False para usar Stop & Wait
+                if use_tcp_sack:
+                    download_file_tcp_sack(args.dst, args.name)
+                else:
+                    download_file_stop_and_wait(args.dst, args.name)
         except CloseConnectionException as e:
             print(e)
         finally:
