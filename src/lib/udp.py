@@ -3,7 +3,7 @@ import socket
 import threading
 import queue
 import os
-from lib.constants import TIMEOUT, FRAGMENT_SIZE
+from lib.constants import FRAGMENT_SIZE
 
 
 class UDPHeader:
@@ -75,7 +75,7 @@ class UDPPackage:
         # Extract header and remaining data
         binary_header = self.data[: UDPHeader.HEADER_SIZE]
         header = UDPHeader.unpack(binary_header)
-        remaining_data = self.data[UDPHeader.HEADER_SIZE :]
+        remaining_data = self.data[UDPHeader.HEADER_SIZE:]
 
         return remaining_data, header
 

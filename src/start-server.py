@@ -1,19 +1,22 @@
 import socket
-import sys
-import os
-import signal
-from lib.utils import setup_signal_handling, limpiar_recursos
+from lib.utils import setup_signal_handling
 from lib.logger import setup_logger
 from lib.parser import parse_server_args
-from lib.udp import receive_package, reject_connection, close_connection, send_start_confirmation, send_end_confirmation
+from lib.udp import (
+    receive_package,
+    reject_connection,
+    close_connection,
+    send_start_confirmation,
+    send_end_confirmation,
+)
 from lib.udp import ClientConnection, UDPFlags, UDPHeader
-from lib.constants import TIMEOUT, FRAGMENT_SIZE
-from lib.constants import HOST, PORT, TIMEOUT, STORAGE
 
 connections = {}
 
 
-def check_connection(server_socket, addr, header: UDPHeader, data: bytes, storage_dir: str, logger):
+def check_connection(
+    server_socket, addr, header: UDPHeader, data: bytes, storage_dir: str, logger
+):
     # TODO: Verificar que data se pueda decodear
     connection = ClientConnection(
         server_socket,
@@ -22,7 +25,9 @@ def check_connection(server_socket, addr, header: UDPHeader, data: bytes, storag
         download=header.has_download(),
     )
 
-    logger.info(f"Path: {data.decode()} | Upload: {connection.upload} | Download: {connection.download}")
+    logger.info(
+        f"Path: {data.decode()} | Upload: {connection.upload} | Download: {connection.download}"
+    )
     if header.has_start() and header.sequence == 0 and data.decode() != "":
         logger.info(f"Mensaje Recibido: {addr} [Start]")
         send_start_confirmation(server_socket, connection)
@@ -76,8 +81,8 @@ def handle_connection(server_socket, storage_dir, logger):
 
 
 def start_server():
-    args = parse_server_args()  
-    logger = setup_logger(verbose=args.verbose, quiet=args.quiet)  
+    args = parse_server_args()
+    logger = setup_logger(verbose=args.verbose, quiet=args.quiet)
 
     # Crear un socket UDP
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -93,7 +98,7 @@ def start_server():
         logger.info("\nInterrupción detectada. El programa ha sido detenido.")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     setup_signal_handling()
     # TODO Limpiar todos los recursos de connection con su respectivo JOIN al cerrar abruptamente
     start_server()
