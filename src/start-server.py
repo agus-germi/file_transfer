@@ -5,8 +5,8 @@ import signal
 from lib.utils import setup_signal_handling, limpiar_recursos
 from lib.logger import setup_logger
 from lib.parser import parse_server_args
-from lib.udp import send_package, receive_package,  reject_connection, close_connection, send_ack, send_confirmation
-from lib.udp import ClientConnection, Connection, UDPFlags, UDPHeader
+from lib.udp import receive_package,  reject_connection, close_connection, send_start_confirmation, send_end_confirmation
+from lib.udp import ClientConnection, UDPFlags, UDPHeader
 from lib.constants import TIMEOUT, FRAGMENT_SIZE
 from lib.constants import HOST, PORT, TIMEOUT, STORAGE
 
@@ -16,6 +16,7 @@ connections = {}
 
 
 def check_connection(server_socket, addr, header: UDPHeader, data: bytes, storage_dir: str):
+	# TODO: Verificar que data se pueda decodear
 	connection = ClientConnection(
 		server_socket,
 		addr,
@@ -26,10 +27,8 @@ def check_connection(server_socket, addr, header: UDPHeader, data: bytes, storag
 	print("Path: ", data.decode(), "| Upload: ", connection.upload, "| Download: ", connection.download)
 	if header.has_start() and header.sequence == 0 and data.decode() != "":
 		print("Mensaje Recibido: ", addr, " [Start]")
-		connection.handle_handshake()
-		if connection.is_active:
-			connections[addr] = connection
-			connection.start()
+		send_start_confirmation(server_socket, connection)
+		connections[addr] = connection
 	else:
 		reject_connection(server_socket, connection)
 
@@ -50,7 +49,16 @@ def handle_connection(server_socket, storage_dir, logger):
 			connection.join() # Para cerrar el thread de la conexion
 			close_connection(server_socket, connection)
 			connections.pop(addr)
-
+		
+		# Confirmacion de inicio de conexion
+		elif header.has_flag(UDPFlags.START) and header.has_flag(UDPFlags.ACK):
+			connection.is_active = True
+			connection.start()
+		
+		# Se recibio un paquete de End
+		elif header.has_flag(UDPFlags.END) and not connection.is_active:
+			send_end_confirmation(server_socket, connection)
+		
 		# Se recibio un paquete de cierre
 		elif header.has_flag(UDPFlags.CLOSE):
 			print("Mensaje Recibido: ", addr, " [Close]")
@@ -60,16 +68,15 @@ def handle_connection(server_socket, storage_dir, logger):
 			# TODO Habria que cerrar desde el server?
 			# Si se pierde el paquete este -> El server por ttl sabe que tiene que cerrar esta conexion
 			print("Cliente Desconectado: ", addr)
-		elif header.has_flag(UDPFlags.END):
-			print("Mensaje Recibido: ", addr, " [End]")
-			connection.save_file()
 		else:
 			print("Mensaje Recibido: ", addr)
 			message = {"addr": addr, "header": header, "data": data}
 			connection.put_message(message)
 
-	except ConnectionResetError:
+	except ConnectionResetError as e:
+		print("BLA: ", e)
 		print("Error: Conexión rechazada por el cliente.")
+
 
 def start_server():
     args = parse_server_args()  # Parse arguments
@@ -88,9 +95,10 @@ def start_server():
         server_socket.close()
         logger.info("\nInterrupción detectada. El programa ha sido detenido.")
 
+
 if __name__ == '__main__':
 	setup_signal_handling()
-	# TODO Si no existe el archivo habria que avisarle al cliente
+	# TODO Limpiar todos los recursos de connection con su respectivo JOIN al cerrar abruptamente
 	start_server()
 
 

@@ -134,22 +134,36 @@ def upload_stop_and_wait(dir, name):
 				except TimeoutError:
 					print(f"Error: ACK {connection.sequence} no recibido del servidor.")
 					#print(f"Enviando paquete nuevamente")
-					send_data(client_socket, connection, fragment, sequence=connection.sequence)
-		
-		send_end(client_socket, connection)
-		close_connection(client_socket, connection)
-		print("Archivo enviado exitosamente.")
+					send_data(client_socket, connection, fragment, sequence=connection.sequence)		
+
+
+def confirm_endfile():
+	for i in range(3):
+		try:
+			send_end(client_socket, connection)
+			addr, header, data = receive_package(client_socket)
+			if header.has_end() and header.has_ack():
+				break
+		except TimeoutError:
+			pass
+
 
 def upload_with_sack(dir, name, protocol):
 	pass
 
+
 def handle_upload(dir, name, protocol):
-    if protocol == "stop_and_wait":
-        upload_stop_and_wait(dir, name)
-    elif protocol == "sack":
-        upload_with_sack(dir, name)
-    else:
-        raise ValueError(f"Unsupported protocol: {protocol}")
+	if protocol == "stop_and_wait":
+		upload_stop_and_wait(dir, name)
+		confirm_endfile()
+		close_connection(client_socket, connection)
+		print("Archivo enviado exitosamente.")
+	elif protocol == "sack":
+		upload_with_sack(dir, name)
+		confirm_endfile()
+	else:
+		raise ValueError(f"Unsupported protocol: {protocol}")
+
 
 if __name__ == '__main__':
 	setup_signal_handling()

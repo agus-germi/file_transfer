@@ -46,6 +46,9 @@ class UDPHeader:
 	def has_start(self):
 		return self.has_flag(UDPFlags.START)
 	
+	def has_end(self):
+		return self.has_flag(UDPFlags.END)
+
 	def has_close(self):
 		return self.has_flag(UDPFlags.CLOSE)
 	
@@ -121,9 +124,13 @@ class ClientConnection(threading.Thread):
 				if self.upload:
 					if message["header"].has_data():
 						self.receive_data(message)
+					elif message["header"].has_end():
+						send_end_confirmation(self.socket, self)
+						self.save_file()
+						self.is_active = False
 				else:
 					self.send_data(message)
-					
+
 
 			except queue.Empty:
 				print(f"Cliente {self.addr} no ha enviado mensajes recientes.")
@@ -174,25 +181,14 @@ class ClientConnection(threading.Thread):
 
 	def get_fragments(self):
 		i = 0
-		with open(self.path, 'rb') as f:
-			for i, fragment in enumerate(iter(lambda: f.read(FRAGMENT_SIZE), b'')):
-				self.fragments[i] = fragment
-
-
-	def handle_handshake(self):
 		try:
-			#time.sleep(3)
-			send_confirmation(self.socket, self)
-			self.socket.settimeout(TIMEOUT)
-			addr, header, data = receive_package(self.socket)
-			if header.has_ack() and header.has_start():
-				self.is_active = True
-				print("Cliente Inicializado ", self.addr)
-				# TODO Deberia cerrar conexion si no?
-		except:
-			print("Cliente Rechazado: ", self.addr)
-		finally:
-			self.socket.settimeout(None)
+			with open(self.path, 'rb') as f:
+				for i, fragment in enumerate(iter(lambda: f.read(FRAGMENT_SIZE), b'')):
+					self.fragments[i] = fragment
+		except FileNotFoundError:
+			print(f"Error: Archivo {self.path} no encontrado.")
+			self.is_active = False
+			close_connection(self.socket, self, "Archivo no encontrado.")
 
 
 	def put_message(self, message):
@@ -200,7 +196,7 @@ class ClientConnection(threading.Thread):
 		self.message_queue.put(message)
 		#print(f"Mensaje enviado a {self.addr}: {message}")
 
-	
+
 	def save_file(self):
 		output_path = self.path
 		dir = self.path.split("/")[0]
@@ -258,7 +254,15 @@ def send_end(socket: socket.socket, connection: Connection):
 	socket.sendto(package, connection.addr)
 
 
-def send_confirmation(socket: socket.socket, connection: Connection):
+def send_end_confirmation(socket: socket.socket, connection: Connection):
+	header = UDPHeader(0, connection.sequence, 0)
+	header.set_flag(UDPFlags.END)
+	header.set_flag(UDPFlags.ACK)
+	package = UDPPackage().pack(header, b"")
+	socket.sendto(package, connection.addr)
+
+
+def send_start_confirmation(socket: socket.socket, connection: Connection):
 	header = UDPHeader(0, connection.sequence, 0)
 	header.set_flag(UDPFlags.START)
 	header.set_flag(UDPFlags.ACK)
@@ -272,11 +276,11 @@ def receive_package(socket: socket.socket):
 	return addr, header, data
 
 
-def close_connection(socket: socket.socket, connection: Connection):
+def close_connection(socket: socket.socket, connection: Connection, data=""):
 	header = UDPHeader(0, 0, 0)
 	header.set_flag(UDPFlags.CLOSE)
 	print("Enviando paquete de cierre ", connection.addr)
-	send_package(socket, connection, header, b"")
+	send_package(socket, connection, header, data.encode())
 
 
 def reject_connection(socket: socket.socket, connection: Connection):

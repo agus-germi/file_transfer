@@ -83,6 +83,10 @@ def download_file():
 
         elif header.has_end():
             is_running = False
+        elif header.has_close():
+            is_running = False
+            if len(data) > 0:
+                print(f"Cierre del servidor: [{data.decode()}]")
 
 
 
