@@ -84,14 +84,14 @@ def upload_file(dir, name):
 
 			send_data(client_socket, connection, fragment, sequence=connection.sequence)
 
-			print(f"Fragmento {connection.sequence} enviado al servidor. Con Data {fragment}")
+			#print(f"Fragmento {connection.sequence} enviado al servidor. Con Data {fragment}")
 
 			addr, header, data = receive_package(client_socket)
 
-			print(f"Header Client sequence {header.sequence}")
-			print(f"Connection Client sequence {connection.sequence}")
+			#print(f"Header Client sequence {header.sequence}")
+			#print(f"Connection Client sequence {connection.sequence}")
 			if header.has_ack() and header.sequence == connection.sequence:
-				print(f"ACK {connection.sequence} recibido del servidor.")
+				#print(f"ACK {connection.sequence} recibido del servidor.")
 				connection.sequence += 1
 			
 			else:
@@ -119,21 +119,21 @@ def upload_stop_and_wait(dir, name):
 
 			send_data(client_socket, connection, fragment, sequence=connection.sequence)
 
-			print(f"Fragmento {connection.sequence} enviado al servidor. Con Data {fragment}")
+			#print(f"Fragmento {connection.sequence} enviado al servidor. Con Data {fragment}")
 
 			# a partir de aca, espero por el ack del servidor
 			while True:
 				try:
 					addr, header, data = receive_package(client_socket)
-					print(f"Header Client sequence {header.sequence}")
-					print(f"Connection Client sequence {connection.sequence}")
+					#print(f"Header Client sequence {header.sequence}")
+					#print(f"Connection Client sequence {connection.sequence}")
 					if header.has_ack() and header.sequence == connection.sequence:
-						print(f"ACK {connection.sequence} recibido del servidor.")
+						#print(f"ACK {connection.sequence} recibido del servidor.")
 						connection.sequence += 1
 						break
 				except TimeoutError:
 					print(f"Error: ACK {connection.sequence} no recibido del servidor.")
-					print(f"Enviando paquete nuevamente")
+					#print(f"Enviando paquete nuevamente")
 					send_data(client_socket, connection, fragment, sequence=connection.sequence)
 		
 		send_end(client_socket, connection)
