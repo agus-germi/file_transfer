@@ -1,7 +1,7 @@
 import argparse
 from mininet.topo import Topo
 from mininet.net import Mininet
-from mininet.node import OVSController
+from mininet.node import Controller
 from mininet.link import TCLink
 from mininet.cli import CLI
 from mininet.util import dumpPorts
@@ -38,7 +38,7 @@ if __name__ == '__main__':
     parser.add_argument('--nhosts', '-n', type=int, default=2)
     args = parser.parse_args()
     topo = MyTopo(args.nhosts)
-    net = Mininet(topo=topo, link=TCLink, controller=OVSController)
+    net = Mininet(topo=topo, link=TCLink, controller=Controller)
 
     net.start()
     dumpPorts(net.hosts)

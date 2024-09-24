@@ -2,7 +2,7 @@ import socket
 import sys
 import os
 import signal
-from lib.logger import setup_logger, parse_upload_args
+from lib.logger import setup_logger
 from lib.utils import setup_signal_handling, limpiar_recursos
 from lib.parser import parse_upload_args, configure_logging
 from lib.udp import (
@@ -59,7 +59,7 @@ def connect_server():
             return False
     except socket.timeout:
         logger.error("Error: No se pudo establecer conexión con el servidor.")
-        client_socket.close()
+        client_socket.close() # seguir intentando, por lo menos unas 5 veces
         return False
 
 
@@ -111,6 +111,10 @@ def upload_stop_and_wait(dir, name):
                         logger.info(f"ACK {connection.sequence} recibido del servidor.")
                         connection.sequence += 1
                         break
+                    else:
+                        logger.error(f"Received ACK {header.sequence} is not {connection.sequence} ")
+
+
                 except TimeoutError:
                     logger.error(f"ACK {connection.sequence} no recibido del servidor. Reenviando.")
                     send_data(client_socket, connection, fragment, sequence=connection.sequence)
