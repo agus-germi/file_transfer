@@ -5,11 +5,8 @@ import queue
 import os
 from lib.constants import FRAGMENT_SIZE
 from lib.logger import setup_logger
-from lib.parser import parse_upload_args
 
-# TODO: poner todo esto en otro lado
-args = parse_upload_args()
-logger = setup_logger(verbose=args.verbose, quiet=args.quiet)
+logger = setup_logger(verbose=False, quiet=False)
 class UDPHeader:
     HEADER_FORMAT = "!B I I"
     HEADER_SIZE = struct.calcsize(HEADER_FORMAT)  # Size of the header in bytes
@@ -176,7 +173,7 @@ class ClientConnection(threading.Thread):
                 key
             ].encode()  # TODO Si es una imagen, ya viene en bytes?
             send_data(self.socket, self, data, sequence=key)
-            logger.info("Send data ", key)
+            print("Send data ", key)
         else:
             send_end(self.socket, self)
             self.is_active = False
@@ -189,14 +186,13 @@ class ClientConnection(threading.Thread):
                 for i, fragment in enumerate(iter(lambda: f.read(FRAGMENT_SIZE), b"")):
                     self.fragments[i] = fragment
         except FileNotFoundError:
-            logger.error(f"Archivo {self.path} no encontrado.")
+            logger.error(f"Error: Archivo {self.path} no encontrado.")
             self.is_active = False
             close_connection(self.socket, self, "Archivo no encontrado.")
 
     def put_message(self, message):
         """Agrega un mensaje a la cola para que sea procesado por el hilo."""
         self.message_queue.put(message)
-        logger.info(f"Mensaje enviado a {self.addr}: {message}")
 
     def save_file(self):
         output_path = self.path
@@ -207,8 +203,6 @@ class ClientConnection(threading.Thread):
         with open(output_path, "wb") as f:
             for i in sorted(self.fragments.keys()):
                 f.write(self.fragments[i])
-        logger.info("Archivo recibido y guardado exitosamente. ", self.path)
-
 
 class Connection:
     def __init__(self, addr, sequence=None, upload=False, download=False, path=None):
@@ -273,7 +267,7 @@ def send_start_confirmation(socket: socket.socket, connection: Connection):
 
 
 def receive_package(socket: socket.socket):
-    data, addr = socket.recvfrom(1024)
+    data, addr = socket.recvfrom(FRAGMENT_SIZE)
     data, header = UDPPackage(data).unpack()
     return addr, header, data
 
@@ -281,7 +275,7 @@ def receive_package(socket: socket.socket):
 def close_connection(socket: socket.socket, connection: Connection, data=""):
     header = UDPHeader(0, 0, 0)
     header.set_flag(UDPFlags.CLOSE)
-    logger.info("Enviando paquete de cierre ", connection.addr)
+    logger.info("Enviando paquete de cierre ")
     send_package(socket, connection, header, data.encode())
 
 
@@ -290,6 +284,6 @@ def reject_connection(socket: socket.socket, connection: Connection):
     try:
         close_connection(socket, connection)
     except Exception:
-        pass # TODO: Verificar si es necesario
+        pass
     finally:
         logger.info(f"Cliente Rechazado: {connection.addr}")

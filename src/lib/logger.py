@@ -15,10 +15,10 @@ def setup_logger(verbose=False, quiet=False):
     logger.addHandler(handler)
 
     if verbose:
-        logger.setLevel(logging.DEBUG)  # Most detailed output
+        logger.setLevel(logging.DEBUG)  
     elif quiet:
-        logger.setLevel(logging.ERROR)  # Only show errors
+        logger.setLevel(logging.WARNING)
     else:
-        logger.setLevel(logging.INFO)  # Default informational output
+        logger.setLevel(logging.INFO)  
 
     return logger
