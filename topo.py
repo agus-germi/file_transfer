@@ -10,13 +10,12 @@ from mininet.term import makeTerms
 
 class MyTopo(Topo):
     def __init__(self, nhosts):
-        
+
         self.nhosts = nhosts
-        #self.build()
         Topo.__init__(self)
 
     def build(self):
-        s1 = self.addSwitch('s1')
+        s1 = self.addSwitch("s1")
         if self.nhosts == 2:
             self.addHost('JuanLopez')
             self.addHost('Hamelin')
@@ -35,10 +34,8 @@ class MyTopo(Topo):
         # for h in self.hosts():
         #     self.addLink(h, s1, loss=5, bw = 100) 
 
-if __name__ == '__main__':
-        
     parser = argparse.ArgumentParser()
-    parser.add_argument('--nhosts', '-n', type=int, default=2)
+    parser.add_argument("--nhosts", "-n", type=int, default=2)
     args = parser.parse_args()
     topo = MyTopo(args.nhosts)
     net = Mininet(topo=topo, link=TCLink, controller=Controller)
@@ -46,7 +43,5 @@ if __name__ == '__main__':
     net.start()
     dumpPorts(net.hosts)
     makeTerms(net.hosts)
-#     for host in net.hosts:
-#          makeTerm(host) 
 
     CLI(net)

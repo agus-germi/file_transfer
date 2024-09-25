@@ -1,10 +1,7 @@
 import socket
-import sys
-import os
-import signal
 from lib.logger import setup_logger
-from lib.utils import setup_signal_handling, limpiar_recursos
-from lib.parser import parse_upload_args, configure_logging
+from lib.utils import setup_signal_handling
+from lib.parser import parse_upload_args
 from lib.udp import (
     Connection,
     UDPFlags,
@@ -16,15 +13,15 @@ from lib.udp import (
     send_end,
 )
 from lib.udp import CloseConnectionException
-from lib.constants import MAX_RETRIES, TIMEOUT, FRAGMENT_SIZE, WINDOW_SIZE
+from lib.constants import TIMEOUT, FRAGMENT_SIZE, WINDOW_SIZE
 
 
 UPLOAD = True
 DOWNLOAD = False
 
 # TODO: poner todo esto en otro lado
-args = parse_upload_args()  
-logger = setup_logger(verbose=args.verbose, quiet=args.quiet)  
+args = parse_upload_args()
+logger = setup_logger(verbose=args.verbose, quiet=args.quiet)
 
 # Crear un socket UDP
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -59,7 +56,7 @@ def connect_server():
             return False
     except socket.timeout:
         logger.error("Error: No se pudo establecer conexión con el servidor.")
-        client_socket.close() # seguir intentando, por lo menos unas 5 veces
+        client_socket.close()  # seguir intentando, por lo menos unas 5 veces
         return False
 
 
@@ -82,7 +79,9 @@ def upload_file(dir, name):
                 logger.info(f"ACK {connection.sequence} recibido del servidor.")
                 connection.sequence += 1
             else:
-                logger.error(f"Error: ACK {connection.sequence} no recibido del servidor.")
+                logger.error(
+                    f"Error: ACK {connection.sequence} no recibido del servidor."
+                )
                 break
 
         send_end(client_socket, connection)
@@ -112,12 +111,20 @@ def upload_stop_and_wait(dir, name):
                         connection.sequence += 1
                         break
                     else:
-                        logger.error(f"Received ACK {header.sequence} is not {connection.sequence} ")
-
+                        logger.error(
+                            f"Received ACK {header.sequence} is not {connection.sequence} "
+                        )
 
                 except TimeoutError:
-                    logger.error(f"ACK {connection.sequence} no recibido del servidor. Reenviando.")
-                    send_data(client_socket, connection, fragment, sequence=connection.sequence)
+                    logger.error(
+                        f"ACK {connection.sequence} no recibido del servidor. Reenviando."
+                    )
+                    send_data(
+                        client_socket,
+                        connection,
+                        fragment,
+                        sequence=connection.sequence,
+                    )
 
 
 def confirm_endfile():
@@ -128,14 +135,18 @@ def confirm_endfile():
             if header.has_end() and header.has_ack():
                 break
         except TimeoutError:
-            logger.warning("Tiempo de espera agotado al confirmar el final del archivo.")
+            logger.warning(
+                "Tiempo de espera agotado al confirmar el final del archivo."
+            )
 
 
 def upload_with_sack(dir, name):
     try:
         window_size = WINDOW_SIZE  # Tamaño de la ventana
         connection.sequence = 0  # Inicia el número de secuencia en 0
-        unacknowledged_packets = {}  # Diccionario para almacenar los paquetes no reconocidos
+        unacknowledged_packets = (
+            {}
+        )  # Diccionario para almacenar los paquetes no reconocidos
 
         # Construye la ruta del archivo
         file_dir = f"{dir}/{name}"
@@ -150,7 +161,12 @@ def upload_with_sack(dir, name):
                         break
 
                     # Envía el fragmento de datos con el número de secuencia actual
-                    send_data(client_socket, connection, fragment, sequence=connection.sequence)
+                    send_data(
+                        client_socket,
+                        connection,
+                        fragment,
+                        sequence=connection.sequence,
+                    )
 
                     # Almacena el fragmento en el diccionario de paquetes no reconocidos
                     unacknowledged_packets[connection.sequence] = fragment
@@ -163,14 +179,22 @@ def upload_with_sack(dir, name):
                 # Manejar los ACKs entrantes (paquetes reconocidos por el receptor)
                 try:
                     client_socket.settimeout(TIMEOUT)
-                    addr, header, data = receive_package(client_socket)  # Recibe un paquete
+                    addr, header, data = receive_package(
+                        client_socket
+                    )  # Recibe un paquete
                     if header.has_ack():  # Si el paquete es un ACK
                         ack_num = header.sequence  # Número de secuencia del ACK
-                        if ack_num in unacknowledged_packets:  # Si el número de secuencia del ACK es válido
+                        if (
+                            ack_num in unacknowledged_packets
+                        ):  # Si el número de secuencia del ACK es válido
                             logger.info(f"ACK recibido para el paquete {ack_num}")
-                            del unacknowledged_packets[ack_num]  # Elimina el paquete reconocido
+                            del unacknowledged_packets[
+                                ack_num
+                            ]  # Elimina el paquete reconocido
                 except socket.timeout:
-                    logger.warning("Tiempo de espera agotado, reenviando paquetes faltantes")
+                    logger.warning(
+                        "Tiempo de espera agotado, reenviando paquetes faltantes"
+                    )
                     # Si hay un timeout, se reenvían los paquetes no reconocidos
                     for pkt_num, data in unacknowledged_packets.items():
                         send_data(client_socket, connection, data, sequence=pkt_num)
@@ -178,30 +202,32 @@ def upload_with_sack(dir, name):
     except Exception as e:
         logger.error(f"Error durante la subida SACK: {e}")
         raise
-    finally:
-        client_socket.close()
+
+
 
 def handle_upload(dir, name, protocol):
-    if protocol == "stop_and_wait":
-        upload_stop_and_wait(dir, name)
-        confirm_endfile()
-        close_connection(client_socket, connection)
-        logger.info("Archivo enviado exitosamente.")
-    elif protocol == "sack":
-        upload_with_sack(dir, name)
-        confirm_endfile()
-    else:
-        logger.error(f"Protocolo no soportado: {protocol}")
-        raise ValueError(f"Protocolo no soportado: {protocol}")
+    try:
+        if protocol == "stop_and_wait":
+            upload_stop_and_wait(dir, name)
+        elif protocol == "sack":
+            upload_with_sack(dir, name)
+        else:
+            logger.error(f"Protocolo no soportado: {protocol}")
+            raise ValueError(f"Protocolo no soportado: {protocol}")
 
+        confirm_endfile()
+        logger.info("Archivo enviado exitosamente.")
+    except Exception as e:
+        logger.error(f"Error durante el upload: {e}")
+    finally:
+        close_connection(client_socket, connection)
 
 if __name__ == "__main__":
     setup_signal_handling()
     if connect_server():
         try:
             handle_upload(args.src, args.name, args.protocol)
-            logger.info(f"{args.src}, {args.name}")
-        except CloseConnectionException as e:
-            logger.error(e)
+        except Exception as e:
+            logger.error(f"Error en main: {e}")
         finally:
             client_socket.close()
