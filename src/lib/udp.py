@@ -3,10 +3,12 @@ import socket
 import threading
 import queue
 import os
-from lib.constants import FRAGMENT_SIZE
+
+from lib.constants import TIMEOUT, FRAGMENT_SIZE, PACKAGE_SIZE
 from lib.logger import setup_logger
 
 logger = setup_logger(verbose=False, quiet=False)
+
 class UDPHeader:
     HEADER_FORMAT = "!B I I"
     HEADER_SIZE = struct.calcsize(HEADER_FORMAT)  # Size of the header in bytes
@@ -267,7 +269,8 @@ def send_start_confirmation(socket: socket.socket, connection: Connection):
 
 
 def receive_package(socket: socket.socket):
-    data, addr = socket.recvfrom(FRAGMENT_SIZE)
+
+    data, addr = socket.recvfrom(PACKAGE_SIZE)
     data, header = UDPPackage(data).unpack()
     return addr, header, data
 
