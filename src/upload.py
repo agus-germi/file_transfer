@@ -202,31 +202,32 @@ def upload_with_sack(dir, name):
     except Exception as e:
         logger.error(f"Error durante la subida SACK: {e}")
         raise
-    finally:
-        client_socket.close()
+
 
 
 def handle_upload(dir, name, protocol):
-    if protocol == "stop_and_wait":
-        upload_stop_and_wait(dir, name)
-        confirm_endfile()
-        close_connection(client_socket, connection)
-        logger.info("Archivo enviado exitosamente.")
-    elif protocol == "sack":
-        upload_with_sack(dir, name)
-        confirm_endfile()
-    else:
-        logger.error(f"Protocolo no soportado: {protocol}")
-        raise ValueError(f"Protocolo no soportado: {protocol}")
+    try:
+        if protocol == "stop_and_wait":
+            upload_stop_and_wait(dir, name)
+        elif protocol == "sack":
+            upload_with_sack(dir, name)
+        else:
+            logger.error(f"Protocolo no soportado: {protocol}")
+            raise ValueError(f"Protocolo no soportado: {protocol}")
 
+        confirm_endfile()
+        logger.info("Archivo enviado exitosamente.")
+    except Exception as e:
+        logger.error(f"Error durante el upload: {e}")
+    finally:
+        close_connection(client_socket, connection)
 
 if __name__ == "__main__":
     setup_signal_handling()
     if connect_server():
         try:
             handle_upload(args.src, args.name, args.protocol)
-            logger.info(f"{args.src}, {args.name}")
-        except CloseConnectionException as e:
-            logger.error(e)
+        except Exception as e:
+            logger.error(f"Error en main: {e}")
         finally:
             client_socket.close()
