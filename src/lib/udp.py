@@ -154,7 +154,7 @@ class ClientConnection(threading.Thread):
     def receive_data(self, message):
         # Verificar si el fragmento ya fue recibido
         if message["header"].sequence in self.fragments:
-            logger.info(f"Fragmento {message["header"].sequence} ya recibido.")
+            #logger.info(f"Fragmento {message["header"].sequence} ya recibido.")
             send_ack(self.socket, self, message["header"].sequence)
             return None
 

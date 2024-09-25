@@ -34,6 +34,7 @@ class MyTopo(Topo):
         # for h in self.hosts():
         #     self.addLink(h, s1, loss=5, bw = 100) 
 
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--nhosts", "-n", type=int, default=2)
     args = parser.parse_args()
