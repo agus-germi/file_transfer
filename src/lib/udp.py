@@ -4,8 +4,12 @@ import threading
 import queue
 import os
 from lib.constants import FRAGMENT_SIZE
+from lib.logger import setup_logger
+from lib.parser import parse_upload_args
 
-
+# TODO: poner todo esto en otro lado
+args = parse_upload_args()
+logger = setup_logger(verbose=args.verbose, quiet=args.quiet)
 class UDPHeader:
     HEADER_FORMAT = "!B I I"
     HEADER_SIZE = struct.calcsize(HEADER_FORMAT)  # Size of the header in bytes
@@ -134,37 +138,37 @@ class ClientConnection(threading.Thread):
                     self.send_data(message)
 
             except queue.Empty:
-                print(f"Cliente {self.addr} no ha enviado mensajes recientes.")
+                logger.warning(f"Cliente {self.addr} no ha enviado mensajes recientes.")
                 if self.ttl >= 5:
                     # TODO Join de thread
-                    print(f"Cliente {self.addr} inactivo por 5 intentos.")
+                    logger.warning(f"Cliente {self.addr} inactivo por 5 intentos.")
                     self.is_active = False
                 self.ttl += 1
                 continue
             except ConnectionResetError as e:
-                print(f"Error de conexión con {self.addr}: {e}")
+                logger.error(f"Error de conexión con {self.addr}: {e}")
                 self.is_active = False
             except Exception as e:
-                print(f"Error inesperado con {self.addr}: {e}")
+                logger.error(f"Error inesperado con {self.addr}: {e}")
                 self.is_active = False
 
     def receive_data(self, message):
         # Verificar si el fragmento ya fue recibido
         if message["header"].sequence in self.fragments:
-            # print(f"Fragmento {message["header"].sequence} ya recibido.")
+            logger.info(f"Fragmento {message["header"].sequence} ya recibido.")
             send_ack(self.socket, self, message["header"].sequence)
             return None
 
         # Fragmento NUEVO
         self.sequence = message["header"].sequence
-        print(f"Recibido desde {self}: [{self.sequence}]")
+        logger.info(f"Recibido desde {self}: [{self.sequence}]")
         self.fragments[self.sequence] = message["data"]
         send_ack(self.socket, self)
 
     def send_data(self, message):
         if message["header"].has_ack():
             sequence = message["header"].sequence
-            print(f"ACK {sequence} recibido desde {self}")
+            logger.info(f"ACK {sequence} recibido desde {self}")
             self.fragments.pop(sequence)
         if len(self.fragments) > 0:
             key = next(iter(self.fragments))
@@ -172,7 +176,7 @@ class ClientConnection(threading.Thread):
                 key
             ].encode()  # TODO Si es una imagen, ya viene en bytes?
             send_data(self.socket, self, data, sequence=key)
-            print("Send data ", key)
+            logger.info("Send data ", key)
         else:
             send_end(self.socket, self)
             self.is_active = False
@@ -185,14 +189,14 @@ class ClientConnection(threading.Thread):
                 for i, fragment in enumerate(iter(lambda: f.read(FRAGMENT_SIZE), b"")):
                     self.fragments[i] = fragment
         except FileNotFoundError:
-            print(f"Error: Archivo {self.path} no encontrado.")
+            logger.error(f"Archivo {self.path} no encontrado.")
             self.is_active = False
             close_connection(self.socket, self, "Archivo no encontrado.")
 
     def put_message(self, message):
         """Agrega un mensaje a la cola para que sea procesado por el hilo."""
         self.message_queue.put(message)
-        # print(f"Mensaje enviado a {self.addr}: {message}")
+        logger.info(f"Mensaje enviado a {self.addr}: {message}")
 
     def save_file(self):
         output_path = self.path
@@ -203,7 +207,7 @@ class ClientConnection(threading.Thread):
         with open(output_path, "wb") as f:
             for i in sorted(self.fragments.keys()):
                 f.write(self.fragments[i])
-        print("Archivo recibido y guardado exitosamente. ", self.path)
+        logger.info("Archivo recibido y guardado exitosamente. ", self.path)
 
 
 class Connection:
@@ -277,7 +281,7 @@ def receive_package(socket: socket.socket):
 def close_connection(socket: socket.socket, connection: Connection, data=""):
     header = UDPHeader(0, 0, 0)
     header.set_flag(UDPFlags.CLOSE)
-    print("Enviando paquete de cierre ", connection.addr)
+    logger.info("Enviando paquete de cierre ", connection.addr)
     send_package(socket, connection, header, data.encode())
 
 
@@ -286,6 +290,6 @@ def reject_connection(socket: socket.socket, connection: Connection):
     try:
         close_connection(socket, connection)
     except Exception:
-        pass
+        pass # TODO: Verificar si es necesario
     finally:
-        print(f"Cliente Rechazado: {connection.addr}")
+        logger.info(f"Cliente Rechazado: {connection.addr}")

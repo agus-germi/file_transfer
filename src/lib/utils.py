@@ -2,9 +2,16 @@ import signal
 import sys
 import os
 
+from lib.logger import setup_logger
+from lib.parser import parse_upload_args
+
+# TODO: poner todo esto en otro lado
+args = parse_upload_args()
+logger = setup_logger(verbose=args.verbose, quiet=args.quiet)
+
 
 def limpiar_recursos(signum, frame):
-    print(f"Recibiendo señal {signum}, limpiando recursos...")
+    logger.info(f"Recibiendo señal {signum}, limpiando recursos...")
     sys.exit(0)  # Salgo del programa con código 0 (éxito)
 
 
