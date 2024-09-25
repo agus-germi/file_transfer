@@ -261,7 +261,7 @@ def send_end_confirmation(socket: socket.socket, connection: Connection):
 
 
 def send_start_confirmation(socket: socket.socket, connection: Connection):
-    header = UDPHeader(0, connection.sequence, 0)
+    header = UDPHeader(0, 0, 0)
     header.set_flag(UDPFlags.START)
     header.set_flag(UDPFlags.ACK)
     package = UDPPackage().pack(header, b"")
@@ -290,3 +290,17 @@ def reject_connection(socket: socket.socket, connection: Connection):
         pass
     finally:
         logger.info(f"Cliente Rechazado: {connection.addr}")
+        
+
+# Commont to clients
+def confirm_endfile(socket, connection):
+	for i in range(3):
+		try:
+			send_end(socket, connection)
+			addr, header, data = receive_package(socket)
+			if header.has_end() and header.has_ack():
+				break
+		except TimeoutError:
+			logger.warning(
+				"Tiempo de espera agotado al confirmar el final del archivo."
+			)
