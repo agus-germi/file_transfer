@@ -2,7 +2,7 @@ import struct
 
 
 
-TIMEOUT = 0.5  # Timeout in seconds
+TIMEOUT = 3  # Timeout in seconds
 MAX_RETRIES = 3 # Numero maximo de reintentos
 WINDOW_SIZE = 5 
 

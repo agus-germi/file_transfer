@@ -1,24 +1,29 @@
 import logging
 
+_logger = None
+
+# lib/logger.py
+
+import logging
+
+_logger = None  # Variable para almacenar la instancia única del logger
 
 def setup_logger(verbose=False, quiet=False):
-    """Configures the logger based on verbosity options."""
-    logger = logging.getLogger("file_transfer")
-    handler = logging.StreamHandler()
+    global _logger
+    if _logger is None:
+        # Configuración inicial del logger
+        _logger = logging.getLogger("app_logger")
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        handler.setFormatter(formatter)
+        _logger.addHandler(handler)
 
-    # Define the logging format
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    handler.setFormatter(formatter)
+        # Establecer el nivel de logging basado en los parámetros
+        if verbose:
+            _logger.setLevel(logging.DEBUG)
+        elif quiet:
+            _logger.setLevel(logging.ERROR)
+        else:
+            _logger.setLevel(logging.INFO)
 
-    logger.addHandler(handler)
-
-    if verbose:
-        logger.setLevel(logging.DEBUG)  
-    elif quiet:
-        logger.setLevel(logging.WARNING)
-    else:
-        logger.setLevel(logging.INFO)  
-
-    return logger
+    return _logger

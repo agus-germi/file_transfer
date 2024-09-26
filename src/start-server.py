@@ -2,14 +2,15 @@ import socket
 from lib.utils import setup_signal_handling
 from lib.logger import setup_logger
 from lib.parser import parse_server_args
-from lib.udp import (
+from lib.connection import (
     receive_package,
     reject_connection,
     close_connection,
     send_start_confirmation,
     send_end_confirmation,
+    ClientConnection
 )
-from lib.udp import ClientConnection, UDPFlags, UDPHeader
+from lib.udp import UDPFlags, UDPHeader
 
 connections = {}
 
@@ -56,6 +57,12 @@ def handle_connection(server_socket, storage_dir, logger):
         elif header.has_flag(UDPFlags.START) and header.has_flag(UDPFlags.ACK):
             connection.is_active = True
             connection.start()
+            
+		# Confirmacion de recepcion de paquete de fin (download)
+        elif header.has_flag(UDPFlags.END) and header.has_flag(UDPFlags.ACK):
+            connection.is_active = False
+            connection.join()
+            # TODO Tiene que mandar close?
 
         # Se recibio un paquete de End
         elif header.has_flag(UDPFlags.END) and not connection.is_active:

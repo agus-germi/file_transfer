@@ -2,10 +2,8 @@ import socket
 from lib.logger import setup_logger
 from lib.utils import setup_signal_handling
 from lib.parser import parse_upload_args
-from lib.udp import (
+from lib.connection import (
 	Connection,
-	UDPFlags,
-	UDPHeader,
 	send_package,
 	receive_package,
 	close_connection,
@@ -13,7 +11,7 @@ from lib.udp import (
 	send_end,
 	confirm_endfile,
 )
-from lib.udp import CloseConnectionException
+from lib.udp import UDPFlags, UDPHeader
 from lib.constants import TIMEOUT, FRAGMENT_SIZE, WINDOW_SIZE
 
 
@@ -32,7 +30,6 @@ connection = Connection(
 	addr=(args.host, args.port),  # Usa los argumentos parseados
 	sequence=0,
 	download=DOWNLOAD,
-	upload=UPLOAD,
 	path=args.name,
 )
 
