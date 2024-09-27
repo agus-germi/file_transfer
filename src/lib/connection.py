@@ -13,205 +13,215 @@ logger = setup_logger(verbose=False, quiet=False)
 
 
 class BaseConnection:
-    """Clase base que contiene atributos y comportamientos comunes de conexiones."""
+	"""Clase base que contiene atributos y comportamientos comunes de conexiones."""
 
-    def __init__(self, addr, path=None, sequence=0, download=False):
-        self.addr = addr
-        self.path = path
-        self.sequence = sequence
-        self.is_active = False
-        self.download = download
-        self.upload = not download
-        self.fragments = {}
-
-
-    def __repr__(self):
-        return f"Cliente ({self.addr})"
+	def __init__(self, addr, path=None, sequence=0, download=False):
+		self.addr = addr
+		self.path = path
+		self.sequence = sequence
+		self.is_active = False
+		self.download = download
+		self.upload = not download
+		self.fragments = {}
+		self.retrys = 0
 
 
-    def save_file(self):
-        output_path = self.path
-        dir = self.path.split("/")[0]
-        if not os.path.exists(dir):
-            os.makedirs(dir)
-
-        with open(output_path, "wb") as f:
-            for i in sorted(self.fragments.keys()):
-                f.write(self.fragments[i])
-        print(f"Archivo guardado en {output_path}")
+	def __repr__(self):
+		return f"Cliente ({self.addr})"
 
 
-    def get_fragments(self):
-        try:
-            with open(self.path, "rb") as f:
-                for i, fragment in enumerate(iter(lambda: f.read(FRAGMENT_SIZE), b"")):
-                    self.fragments[i] = fragment
-            print("Fragments listos para enviar ", len(self.fragments))
-        except FileNotFoundError:
-            logger.error(f"Error: Archivo {self.path} no encontrado.")
-            self.is_active = False
-            close_connection(self.socket, self, "Archivo no encontrado.")
+	def save_file(self):
+		output_path = self.path
+		dir = self.path.split("/")[0]
+		if not os.path.exists(dir):
+			os.makedirs(dir)
+
+		with open(output_path, "wb") as f:
+			for i in sorted(self.fragments.keys()):
+				f.write(self.fragments[i])
+		print(f"Archivo guardado en {output_path}")
+
+
+	def get_fragments(self):
+		try:
+			with open(self.path, "rb") as f:
+				for i, fragment in enumerate(iter(lambda: f.read(FRAGMENT_SIZE), b"")):
+					self.fragments[i] = fragment
+			print("Fragments listos para enviar ", len(self.fragments))
+		except FileNotFoundError:
+			logger.error(f"Error: Archivo {self.path} no encontrado.")
+			self.is_active = False
+			close_connection(self.socket, self, "Archivo no encontrado.")
 
 
 
 class ClientConnection(BaseConnection, threading.Thread):
-    """Clase que maneja la conexión y comunicación con un cliente específico en UDP."""
-    
-    def __init__(self, socket: socket.socket, addr, path, download=False, protocol=""):
-        super().__init__(addr, path, download=download)
-        threading.Thread.__init__(self)
-        self.socket = socket
-        self.message_queue = queue.Queue()
-        self.ttl = 0
+	"""Clase que maneja la conexión y comunicación con un cliente específico en UDP."""
+	
+	def __init__(self, socket: socket.socket, addr, path, download=False, protocol=""):
+		super().__init__(addr, path, download=download)
+		threading.Thread.__init__(self)
+		self.socket = socket
+		self.message_queue = queue.Queue()
+		self.ttl = 0
 
 
-    def run(self):
-        if self.download:
-            self.get_fragments()
-            self.send_data()
+	def run(self):
+		if self.download:
+			self.get_fragments()
+			self.send_data()
 
-        while self.is_active:
-            try:
-                message = self.message_queue.get(timeout=2)
+		while self.is_active:
+			try:
+				message = self.message_queue.get(timeout=2)
 
-                if self.upload:
-                    if message["header"].has_data():
-                        self.receive_data(message)
-                    elif message["header"].has_end():
-                        send_end_confirmation(self.socket, self)
-                        self.save_file()
-                        self.is_active = False
-                else:
-                    self.send_data(message)
+				if self.upload:
+					if message["header"].has_data():
+						self.receive_data(message)
+					elif message["header"].has_end():
+						send_end_confirmation(self.socket, self)
+						self.save_file()
+						self.is_active = False
+				else:
+					self.send_data(message)
 
-            except queue.Empty:
-                logger.warning(f"Cliente {self.addr} no ha enviado mensajes recientes.")
-                if self.ttl >= 10:
-                    logger.warning(f"Cliente {self.addr} inactivo por 5 intentos.")
-                    self.is_active = False
-                elif self.ttl <= MAX_RETRIES and self.download:
-                    self.send_data()
+			except queue.Empty:
+				logger.warning(f"Cliente {self.addr} no ha enviado mensajes recientes.")
+				if self.ttl >= 10:
+					logger.warning(f"Cliente {self.addr} inactivo por 5 intentos.")
+					self.is_active = False
+				elif self.ttl <= MAX_RETRIES and self.download:
+					self.send_data()
 
-                self.ttl += 1
-            except Exception as e:
-                logger.error(f"Error con {self.addr}: {e}")
-                self.is_active = False
-
-
-    def put_message(self, message):
-        """Agrega un mensaje a la cola para ser procesado por el hilo."""
-        self.message_queue.put(message)
+				self.ttl += 1
+			except Exception as e:
+				logger.error(f"Error con {self.addr}: {e}")
+				self.is_active = False
 
 
-    def receive_data(self, message):
-        if message["header"].sequence in self.fragments:
-            send_ack(self.socket, self, message["header"].sequence)
-            return
-
-        self.sequence = message["header"].sequence
-        logger.info(f"Recibido desde {self}: [{self.sequence}]")
-        self.fragments[self.sequence] = message["data"]
-        send_ack(self.socket, self)
+	def put_message(self, message):
+		"""Agrega un mensaje a la cola para ser procesado por el hilo."""
+		self.message_queue.put(message)
 
 
-    def send_data(self, message=None):
-        if message and message["header"].has_ack():
-            sequence = message["header"].sequence
-            logger.info(f"ACK {sequence} recibido desde {self}")
-            self.fragments.pop(sequence)
-        if self.fragments:
-            key = next(iter(self.fragments))
-            data = self.fragments[key]
-            send_data(self.socket, self, data, sequence=key)
-        else:
-            send_end(self.socket, self)
-            self.is_active = False
+	def receive_data(self, message):
+		if message["header"].sequence in self.fragments:
+			send_ack(self.socket, self, message["header"].sequence)
+			return
+
+		self.sequence = message["header"].sequence
+		logger.info(f"Recibido desde {self}: [{self.sequence}]")
+		self.fragments[self.sequence] = message["data"]
+		send_ack(self.socket, self)
+
+
+	def send_data(self, message=None):
+		if message and message["header"].has_ack():
+			sequence = message["header"].sequence
+			logger.info(f"ACK {sequence} recibido desde {self}")
+			if sequence in self.fragments:
+				self.fragments.pop(sequence)
+		if self.fragments:
+			key = next(iter(self.fragments))
+			data = self.fragments[key]
+			send_data(self.socket, self, data, sequence=key)
+		else:
+			send_end(self.socket, self)
+			self.is_active = False
 
 
 
 class Connection(BaseConnection):
-    """Clase que maneja conexiones genéricas."""
+	"""Clase que maneja conexiones genéricas."""
 
-    def __init__(self, addr, sequence=None, download=False, path=None):
-        super().__init__(addr, path, sequence, download)
+	def __init__(self, addr, sequence=None, download=False, path=None):
+		super().__init__(addr, path, sequence, download)
 
 
 class CloseConnectionException(Exception):
-    def __init__(self, mensaje, codigo_error):
-        super().__init__(mensaje)
-        self.codigo_error = codigo_error
+	def __init__(self, mensaje, codigo_error):
+		super().__init__(mensaje)
+		self.codigo_error = codigo_error
 
 
 
 def send_package(socket: socket.socket, connection: Connection, header, data):
-    package = UDPPackage().pack(header, data)
-    socket.sendto(package, connection.addr)
+	package = UDPPackage().pack(header, data)
+	socket.sendto(package, connection.addr)
 
 
 def send_data(
-    socket: socket.socket, connection: Connection, data: bytes, sequence=None
+	socket: socket.socket, connection: Connection, data: bytes, sequence=None
 ):
-    seq = sequence if sequence else connection.sequence
-    header = UDPHeader(0, seq, 0)
-    header.set_flag(UDPFlags.DATA)
-    package = UDPPackage().pack(header, data)
-    socket.sendto(package, connection.addr)
+	seq = sequence if sequence else connection.sequence
+	header = UDPHeader(0, seq, 0)
+	header.set_flag(UDPFlags.DATA)
+	package = UDPPackage().pack(header, data)
+	socket.sendto(package, connection.addr)
 
 
 def send_ack(socket: socket.socket, connection: Connection, sequence=None):
-    seq = sequence if sequence else connection.sequence
-    header = UDPHeader(0, seq, 0)
-    header.set_flag(UDPFlags.ACK)
-    package = UDPPackage().pack(header, b"")
-    socket.sendto(package, connection.addr)
+	seq = sequence if sequence else connection.sequence
+	header = UDPHeader(0, seq, 0)
+	header.set_flag(UDPFlags.ACK)
+	package = UDPPackage().pack(header, b"")
+	socket.sendto(package, connection.addr)
+
+
+def send_sack_ack(socket: socket.socket, connection: Connection, sequence=None):
+	seq = sequence if sequence else connection.sequence
+	header = UDPHeader(0, connection.sequence, 0)
+	header.set_flag(UDPFlags.ACK)
+	package = UDPPackage().pack(header, b"")
+	socket.sendto(package, connection.addr)
 
 
 def send_end(socket: socket.socket, connection: Connection):
-    header = UDPHeader(0, connection.sequence, 0)
-    header.set_flag(UDPFlags.END)
-    package = UDPPackage().pack(header, b"")
-    socket.sendto(package, connection.addr)
+	header = UDPHeader(0, connection.sequence, 0)
+	header.set_flag(UDPFlags.END)
+	package = UDPPackage().pack(header, b"")
+	socket.sendto(package, connection.addr)
 
 
 def send_end_confirmation(socket: socket.socket, connection: Connection):
-    header = UDPHeader(0, connection.sequence, 0)
-    header.set_flag(UDPFlags.END)
-    header.set_flag(UDPFlags.ACK)
-    package = UDPPackage().pack(header, b"")
-    socket.sendto(package, connection.addr)
+	header = UDPHeader(0, connection.sequence, 0)
+	header.set_flag(UDPFlags.END)
+	header.set_flag(UDPFlags.ACK)
+	package = UDPPackage().pack(header, b"")
+	socket.sendto(package, connection.addr)
 
 
 def send_start_confirmation(socket: socket.socket, connection: Connection):
-    header = UDPHeader(0, 0, 0)
-    header.set_flag(UDPFlags.START)
-    header.set_flag(UDPFlags.ACK)
-    package = UDPPackage().pack(header, b"")
-    socket.sendto(package, connection.addr)
+	header = UDPHeader(0, 0, 0)
+	header.set_flag(UDPFlags.START)
+	header.set_flag(UDPFlags.ACK)
+	package = UDPPackage().pack(header, b"")
+	socket.sendto(package, connection.addr)
 
 
 def receive_package(socket: socket.socket):
 
-    data, addr = socket.recvfrom(PACKAGE_SIZE)
-    data, header = UDPPackage(data).unpack()
-    return addr, header, data
+	data, addr = socket.recvfrom(PACKAGE_SIZE)
+	data, header = UDPPackage(data).unpack()
+	return addr, header, data
 
 
 def close_connection(socket: socket.socket, connection: Connection, data=""):
-    header = UDPHeader(0, 0, 0)
-    header.set_flag(UDPFlags.CLOSE)
-    logger.info("Enviando paquete de cierre ")
-    send_package(socket, connection, header, data.encode())
+	header = UDPHeader(0, 0, 0)
+	header.set_flag(UDPFlags.CLOSE)
+	logger.info("Enviando paquete de cierre ")
+	send_package(socket, connection, header, data.encode())
 
 
 def reject_connection(socket: socket.socket, connection: Connection):
-    """Intenta cerrar la conexión y manejar cualquier error."""
-    try:
-        close_connection(socket, connection)
-    except Exception:
-        pass
-    finally:
-        logger.info(f"Cliente Rechazado: {connection.addr}")
-        
+	"""Intenta cerrar la conexión y manejar cualquier error."""
+	try:
+		close_connection(socket, connection)
+	except Exception:
+		pass
+	finally:
+		logger.info(f"Cliente Rechazado: {connection.addr}")
+		
 
 # Commont to clients
 def confirm_endfile(socket, connection):

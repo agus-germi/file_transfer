@@ -89,7 +89,9 @@ def download_stop_and_wait():
 		except socket.timeout:
 			send_ack(client_socket, connection, sequence=header.sequence)
 			logger.warning(f"Reenviando ACK {header.sequence}")
-			return False
+			if connection.retrys > MAX_RETRIES:
+				# TODO Nunca se sube el retries
+				return False
 
 
 def download_with_sack(dir, name):
