@@ -39,7 +39,7 @@ class BaseConnection:
 		with open(output_path, "wb") as f:
 			for i in sorted(self.fragments.keys()):
 				f.write(self.fragments[i])
-		print(f"Archivo guardado en {output_path}")
+		logger.info(f"Archivo guardado en {output_path}")
 
 
 	def get_fragments(self):
@@ -47,7 +47,7 @@ class BaseConnection:
 			with open(self.path, "rb") as f:
 				for i, fragment in enumerate(iter(lambda: f.read(FRAGMENT_SIZE), b"")):
 					self.fragments[i] = fragment
-			print("Fragments listos para enviar ", len(self.fragments))
+			logger.info("Fragments listos para enviar ", len(self.fragments))
 		except FileNotFoundError:
 			logger.error(f"Error: Archivo {self.path} no encontrado.")
 			self.is_active = False
