@@ -2,6 +2,7 @@ import socket
 import sys
 import os
 import signal
+import traceback
 from lib.parser import parse_download_args
 from lib.logger import setup_logger
 from lib.utils import setup_signal_handling
@@ -30,11 +31,16 @@ connection = Connection(
 )
 
 
-def connect_server():
+def connect_server(protocol):
 	header = UDPHeader(0, connection.sequence, 0)
 	header.set_flag(UDPFlags.START)
 	if DOWNLOAD:
 		header.set_flag(UDPFlags.DOWNLOAD)
+	if protocol == "stop_and_wait":
+		header.clear_flag(UDPFlags.PROTOCOL)
+	elif protocol == "sack":
+		header.set_flag(UDPFlags.PROTOCOL)
+		
 	try:
 		send_package(client_socket, connection, header, connection.path.encode())
 		addr, header, data = receive_package(client_socket)
@@ -45,13 +51,13 @@ def connect_server():
 			logger.info("Conexión establecida con el servidor.")
 			return True
 		else:
-			logger.error("Error: No se pudo establecer conexión con el servidor.")
+			logger.error("Error: No se pudo establecer conexión con el servidor. 1")
 			return False
 	except ConnectionResetError:
 		logger.error("Error: Conexión rechazada por el servidor.")
 		return False
 	except socket.timeout:
-		logger.error("Error: No se pudo establecer conexión con el servidor.")
+		logger.error("Error: No se pudo establecer conexión con el servidor. 2")
 		return False
 
 
@@ -94,77 +100,87 @@ def download_stop_and_wait():
 				return False
 
 def download_with_sack():
-    connection.is_active = True
-    expected_sequence = 0
-    received_out_of_order = {}
+	connection.is_active = True
+	expected_sequence = 0
+	received_out_of_order = {}
 
-    while connection.is_active:
-        try:
-            addr, header, data = receive_package(client_socket)
-            
-            if header.has_data():
-                if header.sequence == expected_sequence:
-                    # Procesar el fragmento esperado
-                    connection.fragments[header.sequence] = data
-                    print(f"Fragmento {header.sequence} recibido del servidor.")
-                    
-                    # Actualizar el número de secuencia esperado
-                    expected_sequence += 1
-                    
-                    # Procesar fragmentos almacenados fuera de orden
-                    while expected_sequence in received_out_of_order:
-                        connection.fragments[expected_sequence] = received_out_of_order.pop(expected_sequence)
-                        expected_sequence += 1
-                
-                elif header.sequence > expected_sequence:
-                    # Almacenar fragmento fuera de orden
-                    received_out_of_order[header.sequence] = data
-                    print(f"Fragmento {header.sequence} recibido fuera de orden.")
-                
-                # Preparar y enviar SACK al servidor
-                sack_header = UDPHeader(0, expected_sequence - 1, 0)
-                sack_header.set_flag(UDPFlags.ACK)
-                sack_header.set_flag(UDPFlags.SACK)
-                
-                # Configurar el campo SACK de 32 bits
-                for i in range(32):
-                    if (expected_sequence + i) in received_out_of_order:
-                        sack_header.sack |= (1 << (31 - i))
-                
-                send_package(client_socket, connection, sack_header, b"")
-                print(f"SACK enviado. Último ACK: {expected_sequence - 1}, SACK: {bin(sack_header.sack)[2:].zfill(32)}")
+	#diccionario auxiliar para guardar cuantos retries tuvo cada paquete
+	retries_per_packet = {}
 
-            elif header.has_end():
-                connection.is_active = False
-                connection.save_file()
-                send_end_confirmation(client_socket, connection)
-                print("Archivo recibido completamente.")
-            
-            elif header.has_close():
-                connection.is_active = False
-                if data:
-                    print(f"Cierre del servidor: [{data.decode()}]")
-                    raise ValueError("Archivo inexistente en Servidor")
+	while connection.is_active:
+		try:
+			addr, header, data = receive_package(client_socket)
+			
+			if header.has_data():
+				if header.sequence == expected_sequence:
+					# Procesar el fragmento esperado
+					connection.fragments[header.sequence] = data
+					print(f"Fragmento {header.sequence} recibido del servidor.")
+					
+					# Actualizar el número de secuencia esperado
+					expected_sequence += 1
+					
+					# Procesar fragmentos almacenados fuera de orden
+					while expected_sequence in received_out_of_order:
+						connection.fragments[expected_sequence] = received_out_of_order.pop(expected_sequence)
+						expected_sequence += 1
+				
+				elif header.sequence > expected_sequence:
+					# Almacenar fragmento fuera de orden
+					received_out_of_order[header.sequence] = data
+					print(f"Fragmento {header.sequence} recibido fuera de orden.")
+				
+				# Preparar y enviar SACK al servidor
+				sack_header = UDPHeader(0, expected_sequence - 1, 0)
+				sack_header.set_flag(UDPFlags.ACK)
+				sack_header.set_flag(UDPFlags.SACK)
+				
+				# Configurar el campo SACK de 32 bits
+				for i in range(32):
+					if (expected_sequence + i) in received_out_of_order:
+						sack_header.sack |= (1 << (31 - i))
+				
+				send_package(client_socket, connection, sack_header, b"")
+				print(f"SACK enviado. Último ACK: {expected_sequence - 1}, SACK: {bin(sack_header.sack)[2:].zfill(32)}")
 
-        except socket.timeout:
-            # Manejo de tiempo de espera: reenviar el último SACK
-            sack_header = UDPHeader(0, expected_sequence - 1, 0)
-            sack_header.set_flag(UDPFlags.ACK)
-            sack_header.set_flag(UDPFlags.SACK)
-            
-            for i in range(32):
-                if (expected_sequence + i) in received_out_of_order:
-                    sack_header.sack |= (1 << (31 - i))
-            
-            send_package(client_socket, connection, sack_header, b"")
-            print(f"Timeout. Reenviando SACK. Último ACK: {expected_sequence - 1}, SACK: {bin(sack_header.sack)[2:].zfill(32)}")
-            
-            connection.retrys += 1
-            if connection.retrys > MAX_RETRIES:
-                print("Número máximo de reintentos alcanzado. Cerrando conexión.")
-                return False
+			elif header.has_end():
+				connection.is_active = False
+				connection.save_file()
+				# TODO: El cliente deberia avisar que hay que matar la conexion
+				# send_end_confirmation(client_socket, connection)
+				print("Archivo recibido completamente.")
+			
+			elif header.has_close():
+				connection.is_active = False
+				if data:
+					print(f"Cierre del servidor: [{data.decode()}]")
+					raise ValueError("Archivo inexistente en Servidor")
 
-    return True
+		except socket.timeout:
+			# Manejo de tiempo de espera: reenviar el último SACK
+			sack_header = UDPHeader(0, expected_sequence - 1, 0)
+			sack_header.set_flag(UDPFlags.ACK)
+			sack_header.set_flag(UDPFlags.SACK)
+
+			# Actualizo el diccionario de retries, si no tuve ninguno le cargo 1, si ya tuve le sumo 1.
+			if expected_sequence in retries_per_packet:
+				retries_per_packet[expected_sequence] +=1
+			else: retries_per_packet[expected_sequence] = 1
+
+			# Si tuve el maximo numero de retries para un paquete, mato la conexion
+			if retries_per_packet[expected_sequence] >= MAX_RETRIES:
+				print("Número máximo de reintentos alcanzado. Cerrando conexión.")
+				return False
+			
+			for i in range(32):
+				if (expected_sequence + i) in received_out_of_order:
+					sack_header.sack |= (1 << (31 - i))
+			
+			send_package(client_socket, connection, sack_header, b"")
+
+			print(f"Timeout. Reenviando SACK. Último ACK: {expected_sequence - 1}, SACK: {bin(sack_header.sack)[2:].zfill(32)}")
+
+	return True
 
 
 
@@ -192,12 +208,14 @@ def handle_download(protocol):
 if __name__ == "__main__":
 	setup_signal_handling()
 	try:
-		if connect_server():
+		if connect_server(args.protocol):
 			connection.path = f"{args.dst}/{args.name}"
 			handle_download(args.protocol)
 	except ValueError as e:
 		logger.error(e)
+		logger.error(traceback.format_exc())
 	except Exception as e:
 		logger.error(f"Error en main: {e}")
+		logger.error(traceback.format_exc())
 	finally:
 		client_socket.close()

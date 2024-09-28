@@ -20,7 +20,7 @@ class UDPHeader:
 		self.sack = sack # Ver que sea todo 0
 		
 		
-		#00000000 0000000 00000000
+		#0000000 0000000 00000000 0000000
 		
 		# No recibi: 11
 
@@ -100,6 +100,7 @@ class UDPHeader:
 		return self.has_flag(UDPFlags.DOWNLOAD)
 
 	def has_protocol(self):
+		# TODO"""Check if the protocol flag is set. If not set, it is stop and wait, if set it is selective ack."""
 		return self.has_flag(UDPFlags.PROTOCOL)
 
 

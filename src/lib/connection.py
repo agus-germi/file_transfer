@@ -4,7 +4,7 @@ import threading
 import queue
 import os
 
-from lib.constants import TIMEOUT, FRAGMENT_SIZE, PACKAGE_SIZE, MAX_RETRIES
+from lib.constants import TIMEOUT, FRAGMENT_SIZE, PACKAGE_SIZE, MAX_RETRIES, SACK_WINDOW_SIZE
 from lib.udp import UDPHeader, UDPFlags, UDPPackage
 from lib.logger import setup_logger
 
@@ -56,20 +56,24 @@ class BaseConnection:
 
 
 class ClientConnection(BaseConnection, threading.Thread):
-	"""Clase que maneja la conexión y comunicación con un cliente específico en UDP."""
-	
 	def __init__(self, socket: socket.socket, addr, path, download=False, protocol=""):
 		super().__init__(addr, path, download=download)
 		threading.Thread.__init__(self)
 		self.socket = socket
 		self.message_queue = queue.Queue()
 		self.ttl = 0
-
+		self.protocol = protocol
+		self.window_start = 0
+		self.window_end = SACK_WINDOW_SIZE
+		self.unacked_packets = {}
 
 	def run(self):
 		if self.download:
 			self.get_fragments()
-			self.send_data()
+			if self.protocol == "sack":
+				self.send_data_sack()
+			else:
+				self.send_data()
 
 		while self.is_active:
 			try:
@@ -83,7 +87,10 @@ class ClientConnection(BaseConnection, threading.Thread):
 						self.save_file()
 						self.is_active = False
 				else:
-					self.send_data(message)
+					if self.protocol == "sack":
+						self.handle_sack_ack(message)
+					else:
+						self.send_data(message)
 
 			except queue.Empty:
 				logger.warning(f"Cliente {self.addr} no ha enviado mensajes recientes.")
@@ -91,12 +98,47 @@ class ClientConnection(BaseConnection, threading.Thread):
 					logger.warning(f"Cliente {self.addr} inactivo por 5 intentos.")
 					self.is_active = False
 				elif self.ttl <= MAX_RETRIES and self.download:
-					self.send_data()
+					if self.protocol == "sack":
+						self.send_data_sack()
+					else:
+						self.send_data()
 
 				self.ttl += 1
 			except Exception as e:
 				logger.error(f"Error con {self.addr}: {e}")
 				self.is_active = False
+
+	def send_data_sack(self):
+		for seq in range(self.window_start, min(self.window_end, len(self.fragments))):
+			if seq not in self.unacked_packets:
+				data = self.fragments[seq]
+				send_data(self.socket, self, data, sequence=seq)
+				self.unacked_packets[seq] = data
+
+	def handle_sack_ack(self, message):
+		if message["header"].has_ack():
+			ack_seq = message["header"].sequence
+			sack_bits = message["header"].sack
+
+			# Process ACK
+			self.window_start = max(self.window_start, ack_seq + 1)
+
+			# Process SACK
+			for i in range(32):
+				if (sack_bits >> i) & 1:
+					seq = ack_seq + i + 1
+					if seq in self.unacked_packets:
+						del self.unacked_packets[seq]
+
+			# Slide window
+			self.window_end = self.window_start + SACK_WINDOW_SIZE
+
+			# Send new data
+			self.send_data_sack()
+
+		if not self.unacked_packets and self.window_start >= len(self.fragments):
+			send_end(self.socket, self)
+			self.is_active = False
 
 
 	def put_message(self, message):

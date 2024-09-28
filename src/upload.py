@@ -129,81 +129,77 @@ def upload_stop_and_wait(dir, name):
 
 
 
-def upload_with_sack(dir, name):
-	try:
-		connection.sequence = 0  # Inicia el número de secuencia en 0
-		unacked_packets = {}  # Diccionario para almacenar los paquetes no reconocidos <- TOTAL DE PAQUETES
+# def upload_with_sack(dir, name):
+# 	#try:
+# 	connection.sequence = 0  # Inicia el número de secuencia en 0
+# 	unacked_packets = {}  # Diccionario para almacenar los paquetes no reconocidos <- TOTAL DE PAQUETES
 
-		# Construye la ruta del archivo
-		file_dir = f"{dir}/{name}"
+# 	# Construye la ruta del archivo
+# 	file_dir = f"{dir}/{name}"
 
-		# WHILE UNACKED_PACKETS:
-		 
+# 	# WHILE UNACKED_PACKETS:
+		
 
-		# Abre el archivo en modo lectura binaria
-		with open(file_dir, "rb") as file:
-			unacked_packets = connection.get_fragments() #Primero guardamos el total de los paquetes
+# 	# Abre el archivo en modo lectura binaria
+# 	with open(file_dir, "rb") as file:
+# 		unacked_packets = connection.get_fragments() #Primero guardamos el total de los paquetes
 
-			#TODO que pasa si hay menos paquetes que window size
-			network_load = []
-			while len(network_load) < WINDOW_SIZE: # Envio la cantidad que la windowSize me pe
-				packet_to_send = unacked_packets[connection.sequence]
-				send_data(
-						client_socket,
-						connection,
-						packet_to_send,
-						sequence=connection.sequence,
-					)
-				network_load.append(connection.sequence)
-				connection.sequence += 1	
-			while unacked_packets: # Mientras tengamos paquetes sin ACK (no enviados correctamente)
-				client_socket.settimeout(TIMEOUT)
-				try:
-					_, header, _ = receive_package(client_socket)
-					last_complete_secuence, sack = header.decode_sack()
-					#borrar los sack correspondientes
-					
-					#borrar todo lo previo a last_complete 
-					index_from = 0 if last_complete_secuence < WINDOW_SIZE else last_complete_secuence - WINDOW_SIZE #esto puede ser *2
-					for i in range(index_from, last_complete_secuence):
-						unacked_packets.remove(i)
-					
-					#Borrar aquellos que recibi fuera de orden
-					for selected_ack in sack:
-						unacked_packets.remove(selected_ack)
-					
-					## aca recibe el paquete y tenemos que ver como hacer para enviar el siguiente moviendo la ventana acorde
-					first_item = next(iter(my_dict.items())) # si obtenemos el primer elemento del dict luego de borrar los que estoy segura que ya se enviaron => envio ese
-					send_data(
-						client_socket,
-						connection,
-						packet_to_send,
-						sequence=connection.sequence,
-					)					
+# 		#TODO que pasa si hay menos paquetes que window size
+# 		network_load = []
+# 		while len(network_load) < WINDOW_SIZE: # Envio la cantidad que la windowSize me pe
+# 			packet_to_send = unacked_packets[connection.sequence]
+# 			send_data(
+# 					client_socket,
+# 					connection,
+# 					packet_to_send,
+# 					sequence=connection.sequence,
+# 				)
+# 			network_load.append(connection.sequence)
+# 			connection.sequence += 1	
+# 		while unacked_packets: # Mientras tengamos paquetes sin ACK (no enviados correctamente)
+# 			client_socket.settimeout(TIMEOUT)
+# 			try:
+# 				_, header, _ = receive_package(client_socket)
+# 				last_complete_secuence, sack = header.decode_sack()
+# 				#borrar los sack correspondientes
+				
+# 				#borrar todo lo previo a last_complete 
+# 				index_from = 0 if last_complete_secuence < WINDOW_SIZE else last_complete_secuence - WINDOW_SIZE #esto puede ser *2
+# 				for i in range(index_from, last_complete_secuence):
+# 					unacked_packets.remove(i)
+				
+# 				#Borrar aquellos que recibi fuera de orden
+# 				for selected_ack in sack:
+# 					unacked_packets.remove(selected_ack)
+				
+# 				## aca recibe el paquete y tenemos que ver como hacer para enviar el siguiente moviendo la ventana acorde
+# 				first_item = next(iter(my_dict.items())) # si obtenemos el primer elemento del dict luego de borrar los que estoy segura que ya se enviaron => envio ese
+# 				send_data(
+# 					client_socket,
+# 					connection,
+# 					packet_to_send,
+# 					sequence=connection.sequence,
+# 				)					
 
-			
-				except TimeoutError:
+# 			except TimeoutError:
 					#mandar el primero en la cola
 	#except Exception as e:
-	#	logger.error(f"Error durante la subida SACK: {e}")
-	#	raise
+		#logger.error(f"Error durante la subida SACK: {e}")
+		#raise ValueError(f"Protocolo no soportado: {protocol}")
 
-# recibimos ack 1000
-#		(1000 - 8 , 1000 + 8)
-# recibinmos ack 5
-# 5-8
-
-
-
-			#while buff.not_empty:
-				#try:
-					#header = socket_read()
-					#sec, sacks = decode(header)
-					#buff.remove(sec, sacks)
-					#buff.refil
-					#buff.send_first
-				#except timeout:
-					##buff.send_first
+#recibimos ack 1000
+#(1000 - 8 , 1000 + 8)
+#recibinmos ack 5
+#5-8
+		# while buff.not_empty:
+		# 	try:
+		# 		header = socket_read()
+		# 		sec, sacks = decode(header)
+		# 		buff.remove(sec, sacks)
+		# 		buff.refil
+		# 		buff.send_first
+		# 	except timeout:
+		# 		buff.send_first
 
 				
 

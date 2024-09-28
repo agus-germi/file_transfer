@@ -3,12 +3,12 @@ import struct
 
 
 TIMEOUT = 0.1  # Timeout in seconds
-MAX_RETRIES = 3 # Numero maximo de reintentos
-WINDOW_SIZE = 8 
+MAX_RETRIES = 10 # Numero maximo de reintentos
+SACK_WINDOW_SIZE = 8 
 
 HEADER_FORMAT = '!B I I'
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
-FRAGMENT_SIZE = 1024
+FRAGMENT_SIZE = 4096
 PACKAGE_SIZE = HEADER_SIZE + FRAGMENT_SIZE
 
 
