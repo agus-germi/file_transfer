@@ -1,4 +1,5 @@
 import socket
+import traceback
 from lib.logger import setup_logger
 from lib.utils import setup_signal_handling
 from lib.parser import parse_upload_args
@@ -14,6 +15,7 @@ from lib.connection import (
 from lib.udp import UDPFlags, UDPHeader
 from lib.constants import TIMEOUT, FRAGMENT_SIZE, WINDOW_SIZE
 
+from collections import deque
 
 UPLOAD = True
 DOWNLOAD = False
@@ -124,88 +126,93 @@ def upload_stop_and_wait(dir, name):
 						fragment,
 						sequence=connection.sequence,
 					)
-
-
-
+		
 
 
 def upload_with_sack(dir, name):
-	try:
+	try: 
 		connection.sequence = 0  # Inicia el número de secuencia en 0
-		unacked_packets = {}  # Diccionario para almacenar los paquetes no reconocidos <- TOTAL DE PAQUETES
-
-		# Construye la ruta del archivo
+		
 		file_dir = f"{dir}/{name}"
+		unacked_packets, sec_num_last_packet = get_fragments_sack(file_dir)  # Diccionario para almacenar los paquetes no reconocidos <- TOTAL DE PAQUETES
 
-		# WHILE UNACKED_PACKETS:
-		 
+		window = deque()
+		
+		while len(window) < WINDOW_SIZE: # Envio la cantidad que la windowSize me pe
+			packet_to_send = unacked_packets[connection.sequence]
+			send_data(
+					client_socket,
+					connection,
+					packet_to_send,
+					sequence=connection.sequence,
+				)
+			window.append(connection.sequence)
+			connection.sequence += 1	
 
-		# Abre el archivo en modo lectura binaria
-		with open(file_dir, "rb") as file:
-			unacked_packets = connection.get_fragments() #Primero guardamos el total de los paquetes
+		while unacked_packets: # Mientras tengamos paquetes sin ACK (no enviados correctamente)
+			client_socket.settimeout(TIMEOUT)
+			try:
+				_, header, _ = receive_package(client_socket)
+				last_complete_secuence, sack = header.get_sequences()
+				#borrar los sack correspondientes
+				
+				#borrar todo lo previo a last_complete 
+				# index_from = 0 if last_complete_secuence < WINDOW_SIZE else last_complete_secuence - WINDOW_SIZE #esto puede ser *2
+				# for i in range(index_from, last_complete_secuence):
+				# 	unacked_packets.remove(i)
+				
 
-			#TODO que pasa si hay menos paquetes que window size
-			network_load = []
-			while len(network_load) < WINDOW_SIZE: # Envio la cantidad que la windowSize me pe
-				packet_to_send = unacked_packets[connection.sequence]
-				send_data(
-						client_socket,
-						connection,
-						packet_to_send,
-						sequence=connection.sequence,
-					)
-				network_load.append(connection.sequence)
-				connection.sequence += 1	
-			while unacked_packets: # Mientras tengamos paquetes sin ACK (no enviados correctamente)
-				client_socket.settimeout(TIMEOUT)
-				try:
-					_, header, _ = receive_package(client_socket)
-					last_complete_secuence, sack = header.decode_sack()
-					#borrar los sack correspondientes
-					
-					#borrar todo lo previo a last_complete 
-					index_from = 0 if last_complete_secuence < WINDOW_SIZE else last_complete_secuence - WINDOW_SIZE #esto puede ser *2
-					for i in range(index_from, last_complete_secuence):
-						unacked_packets.remove(i)
-					
-					#Borrar aquellos que recibi fuera de orden
-					for selected_ack in sack:
-						unacked_packets.remove(selected_ack)
-					
-					## aca recibe el paquete y tenemos que ver como hacer para enviar el siguiente moviendo la ventana acorde
-					first_item = next(iter(my_dict.items())) # si obtenemos el primer elemento del dict luego de borrar los que estoy segura que ya se enviaron => envio ese
+				
+				#Borrar aquellos que recibi fuera de orden
+				# for selected_ack in sack:
+				# 	unacked_packets.remove(selected_ack)
+				
+				## aca recibe el paquete y tenemos que ver como hacer para enviar el siguiente moviendo la ventana acorde
+				elemento_recibido = window.popleft()
+				logger.info(f"elemento_recibido = {elemento_recibido}")
+				logger.info(f"last_complete_secuence = {last_complete_secuence}")
+				logger.info(f"WINDOW state after popping {elemento_recibido}= {window}")
+
+				#borramos del buffer el elemento con ack
+				del unacked_packets[elemento_recibido]
+				
+				
+				if connection.sequence < sec_num_last_packet:
+					#quedan elementos, mando el siguiente
+					connection.sequence += 1
+					window.append(connection.sequence)
+					elemento_a_enviar = unacked_packets[connection.sequence]
 					send_data(
 						client_socket,
 						connection,
-						packet_to_send,
+						elemento_a_enviar,
 						sequence=connection.sequence,
-					)					
+					)
+				else:
+					if len(window) == 0:
+						return
+					logger.info("No quedan elementos, esperando los ack restantes")
 
-			
-				except TimeoutError:
-					#mandar el primero en la cola
-	#except Exception as e:
-	#	logger.error(f"Error durante la subida SACK: {e}")
-	#	raise
-
-# recibimos ack 1000
-#		(1000 - 8 , 1000 + 8)
-# recibinmos ack 5
-# 5-8
-
-
-
-			#while buff.not_empty:
-				#try:
-					#header = socket_read()
-					#sec, sacks = decode(header)
-					#buff.remove(sec, sacks)
-					#buff.refil
-					#buff.send_first
-				#except timeout:
-					##buff.send_first
-
+			except TimeoutError:
+				logger.error("TIMEOUT")
 				
+	except:
+		logger.error("Traceback info:\n" + traceback.format_exc())
+
+
+
+def get_fragments_sack(file_dir) -> tuple:
+		frag = {}
+		contador = 0
+		try:
+			with open(file_dir, "rb") as f:
+				for i, fragment in enumerate(iter(lambda: f.read(FRAGMENT_SIZE), b"")):
+					frag[i] = fragment
+					contador = i
+		except FileNotFoundError:
+			logger.error(f"Error: Archivo {file_dir} no encontrado.")
+		return frag, contador
+		
 
 
 def handle_upload(dir, name, protocol):
@@ -235,3 +242,90 @@ if __name__ == "__main__":
 		logger.error(f"Error en main: {e}")
 	finally:
 		client_socket.close()
+
+"""""
+import socket
+import os
+import struct
+import time
+
+# Constants
+PACKET_SIZE = 1024    # Adjust based on MTU
+TIMEOUT = 2           # Timeout for receiving ACKs/SACKs in seconds
+WINDOW_SIZE = 5       # Sliding window size (number of in-flight packets)
+
+# Helper function to divide file into packets
+def divide_file_into_packets(file_path):
+    with open(file_path, "rb") as f:
+        data = f.read()
+    packets = [data[i:i + PACKET_SIZE] for i in range(0, len(data), PACKET_SIZE)]
+    return packets
+
+# Upload function using SACK with a sliding window
+def upload_file_sack(sock, server_address, file_path):
+    # Step 1: Divide the file into packets
+    packets = divide_file_into_packets(file_path)
+    total_packets = len(packets)
+    
+    # Step 2: Send the file size and total packets info to the server
+    file_size = os.path.getsize(file_path)
+    sock.sendto(struct.pack("!Q", file_size), server_address)
+    
+    print(f"Uploading '{file_path}' ({file_size} bytes) using SACK with sliding window")
+    
+    # Step 3: Initialize sequence number, sliding window, and ack tracking
+    base = 0  # Start of the window (seq number)
+    next_seq_num = 0  # Next sequence number to send
+    unacked_packets = set(range(total_packets))  # Packets that haven't been acknowledged
+    
+    # Step 4: Set socket timeout
+    sock.settimeout(TIMEOUT)
+    
+    # Step 5: Upload loop
+    while unacked_packets:
+        # Step 6: Send packets within the window
+        while next_seq_num < base + WINDOW_SIZE and next_seq_num < total_packets:
+            if next_seq_num in unacked_packets:
+                packet_data = packets[next_seq_num]
+                packet = struct.pack("!I", next_seq_num) + packet_data
+                sock.sendto(packet, server_address)
+                print(f"Sent packet {next_seq_num}")
+            next_seq_num += 1
+        
+        # Step 7: Wait for SACK response or timeout
+        try:
+            response, _ = sock.recvfrom(1024)
+            ack_type, = struct.unpack("!B", response[:1])
+            
+            if ack_type == 1:  # SACK response
+                sack_ranges = struct.unpack("!I" * ((len(response) - 1) // 4), response[1:])
+                print(f"Received SACK: {sack_ranges}")
+                
+                # Remove acknowledged packets from the unacked set
+                for sack_num in sack_ranges:
+                    if sack_num in unacked_packets:
+                        unacked_packets.remove(sack_num)
+                
+                # Update the window base to the lowest unacknowledged packet
+                if unacked_packets:
+                    base = min(unacked_packets)
+                else:
+                    base = total_packets  # All packets acknowledged
+            
+        except socket.timeout:
+            print("Timeout waiting for SACK, retransmitting unacknowledged packets in the window...")
+            # On timeout, reset the next_seq_num to the base to resend unacknowledged packets in the window
+            next_seq_num = base
+    
+    print("File upload complete.")
+
+# Example usage
+if __name__ == "__main__":
+    server_ip = '127.0.0.1'
+    server_port = 9000
+    file_to_upload = 'example_file.txt'
+    
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        server_addr = (server_ip, server_port)
+        upload_file_sack(sock, server_addr, file_to_upload)
+"""

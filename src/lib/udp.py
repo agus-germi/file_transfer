@@ -31,19 +31,23 @@ class UDPHeader:
 		)
 	
 	def get_sequences(self)-> tuple:
-		""" Devuelve el primer elemento el num_sequence en el que esta y en el 2 elemento resto de los packetes recividos """
-		one_bits = []
-		sequences = []
+		try:
+			""" Devuelve el primer elemento el num_sequence en el que esta y en el 2 elemento resto de los packetes recividos """
+			one_bits = []
+			sequences = []
 
-		bits_total = 32
-		for i in range(bits_total - 1, -1, -1):
-			if (self.sack >> i) & 1:
-				one_bits.append(bits_total - i)
-				sequences.append(bits_total -i + self.sequence)
+			bits_total = 32
+			for i in range(bits_total - 1, -1, -1):
+				if (self.sack >> i) & 1:
+					one_bits.append(bits_total - i)
+					sequences.append(bits_total -i + self.sequence)
 		
-		# Borrar todos los paquetes con numero de sequencia < al primer elemento y los elementos del segundo elemento
-		# Puede estar el caso border que si la diferencia entre lo que no recibio y el paquete que estoy mandando es mayor a 20. Me enfoco en mandar lo que no se recibio
-		return (self.sequence, sequences)
+			# Borrar todos los paquetes con numero de sequencia < al primer elemento y los elementos del segundo elemento
+			# Puede estar el caso border que si la diferencia entre lo que no recibio y el paquete que estoy mandando es mayor a 20. Me enfoco en mandar lo que no se recibio
+			return (self.sequence, sequences)
+		
+		except Exception as e:
+			logger.error(f"Error al obtener la secuencia: {e}")
 	
 	
 	def set_sack(self, package_secuence):

@@ -9,7 +9,7 @@ from mininet.term import makeTerms
 
 
 class MyTopo(Topo):
-    def __init__(self, nhosts):
+    def __init__(self, nhosts, arg_loss):
 
         self.nhosts = nhosts
         Topo.__init__(self)
@@ -20,27 +20,23 @@ class MyTopo(Topo):
             self.addHost('JuanLopez')
             self.addHost('Hamelin')
             self.addLink('JuanLopez', s1)
-            self.addLink('Hamelin', s1, loss=10)
+            self.addLink('Hamelin', s1, arg_loss=10)
             return
         else:
             server = self.addHost('aserver')
-            self.addLink(server, s1, loss=10)
+            self.addLink(server, s1, arg_loss=10)
             hosts = ['h' + str(i) for i in range(1, self.nhosts + 1)]
 
             for host in hosts:
                 self.addHost(host)
                 self.addLink(host, s1)
 
-        # cada host se conecta con el server a traves de un solo switch
-        # todo link tiene una perdida de 5% tal que una conexion host-server tiene una perdida de 10%
-        for h in self.hosts():
-            self.addLink(h, s1, loss=5) 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--nhosts", "-n", type=int, default=2)
+    parser.add_argument("--loss", "-l", type=int, default=10)
     args = parser.parse_args()
-    topo = MyTopo(args.nhosts)
+    topo = MyTopo(args.nhosts, args.loss)
     net = Mininet(topo=topo, link=TCLink, controller=Controller)
 
     net.start()
