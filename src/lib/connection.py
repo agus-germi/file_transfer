@@ -115,41 +115,30 @@ class ClientConnection(BaseConnection, threading.Thread):
 				send_data(self.socket, self, data, sequence=seq)
 				self.unacked_packets[seq] = data
 
-def handle_sack_ack(self, message):
-    if message["header"].has_ack():
-        ack_seq = message["header"].sequence
-        sack_bits = message["header"].sack
+	def handle_sack_ack(self, message):
+		if message["header"].has_ack():
+			ack_seq = message["header"].sequence
+			sack_bits = message["header"].sack
 
-        # Procesar ACK
-        self.window_start = max(self.window_start, ack_seq + 1)
+			# Process ACK
+			self.window_start = max(self.window_start, ack_seq + 1)
 
-        # Procesar SACK
-        for i in range(32):
-            if (sack_bits >> i) & 1:
-                seq = ack_seq + i + 1
-                if seq in self.unacked_packets:
-                    del self.unacked_packets[seq]
+			# Process SACK
+			for i in range(32):
+				if (sack_bits >> i) & 1:
+					seq = ack_seq + i + 1
+					if seq in self.unacked_packets:
+						del self.unacked_packets[seq]
 
-        # Retransmitir fragmentos no reconocidos
-        for i in range(32):
-            if not (sack_bits >> i) & 1:
-                seq = ack_seq + i + 1
-                if seq in self.unacked_packets:
-                    # Retransmitir los fragmentos perdidos
-                    data = self.unacked_packets[seq]
-                    send_data(self.socket, self, data, sequence=seq)
+			# Slide window
+			self.window_end = self.window_start + SACK_WINDOW_SIZE
 
-        # Mover la ventana de SACK y enviar nuevos fragmentos
-        self.window_end = self.window_start + SACK_WINDOW_SIZE
+			# Send new data
+			self.send_data_sack()
 
-        # Enviar nuevos datos si la ventana lo permite
-        self.send_data_sack()
-
-    # Condición para cerrar la conexión cuando se han enviado todos los fragmentos
-    if not self.unacked_packets and self.window_start >= len(self.fragments):
-        send_end(self.socket, self)
-        self.is_active = False
-
+		if not self.unacked_packets and self.window_start >= len(self.fragments):
+			send_end(self.socket, self)
+			self.is_active = False
 
 
 	def put_message(self, message):
