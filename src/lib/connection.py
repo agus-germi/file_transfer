@@ -114,6 +114,14 @@ class ClientConnection(BaseConnection, threading.Thread):
 				data = self.fragments[seq]
 				send_data(self.socket, self, data, sequence=seq)
 				self.unacked_packets[seq] = data
+		#deberia retransmitir los que se perdieron -> los unacked
+
+	def retransmit_data_sack(self):
+		for seq in range(self.window_start, min(self.window_end, len(self.fragments))):
+			if seq in self.unacked_packets:
+				data = self.fragments[seq]
+				send_data(self.socket, self, data, sequence=seq)
+			
 
 	def handle_sack_ack(self, message):
 		if message["header"].has_ack():
@@ -123,15 +131,26 @@ class ClientConnection(BaseConnection, threading.Thread):
 			# Process ACK
 			self.window_start = max(self.window_start, ack_seq + 1)
 
-			# Process SACK
-			for i in range(32):
-				if (sack_bits >> i) & 1:
-					seq = ack_seq + i + 1
-					if seq in self.unacked_packets:
-						del self.unacked_packets[seq]
+			print(f"Unacked packets antes de procesar el SACK: {self.unacked_packets.keys()}")
+
+			
+			sequence, sack = message["header"].get_sequences()
+			print(f"seq es {sequence}, sack es {sack}")
+
+			for i in sack:
+				if i in self.unacked_packets:
+					del self.unacked_packets[i]
+
+			for i in range(0, sequence):
+				del self.unacked_packets[i]
+			
+			#logger.info(f"SACK enviado. Último ACK: {ack_seq - 1}, SACK: {bin(sack_bits)[2:].zfill(32)}")
+			print(f"Unacked packets despues de procesar el SACK: {self.unacked_packets.keys()}")
 
 			# Slide window
 			self.window_end = self.window_start + SACK_WINDOW_SIZE
+
+			#self.retransmit_data_sack()
 
 			# Send new data
 			self.send_data_sack()
