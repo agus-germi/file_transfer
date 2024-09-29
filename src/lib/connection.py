@@ -82,19 +82,21 @@ class ClientConnection(BaseConnection, threading.Thread):
 
 		while self.is_active:
 			try:
-				message = self.message_queue.get(timeout=2)
+				message = self.message_queue.get(timeout=TIMEOUT)
 
 				if self.upload:
 					if message["header"].has_data():
+						self.ttl = 0
 						self.receive_data(message)
 					elif message["header"].has_end():
 						self.send_end_confirmation()
 				else:
 					self.send_data(message)
+					
 
 			except queue.Empty:
 				logger.warning(f"Cliente {self.addr} no ha enviado mensajes recientes.")
-				if self.ttl >= 10:
+				if self.ttl >= 100:
 					logger.warning(f"Cliente {self.addr} inactivo por 5 intentos.")
 					self.is_active = False
 				elif self.ttl <= MAX_RETRIES and self.download:
@@ -124,6 +126,7 @@ class ClientConnection(BaseConnection, threading.Thread):
 
 	def send_data(self, message=None):
 		if message and message["header"].has_ack():
+			self.ttl = 0
 			sequence = message["header"].sequence
 			logger.info(f"ACK {sequence} recibido desde {self}")
 			if sequence in self.fragments:
@@ -213,7 +216,8 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 			self.received_out_of_order.sort()
 			received_out_of_order = list(self.received_out_of_order)
 			for i in received_out_of_order:
-				if i == self.sequence +1:
+				print("Recibidos: ", received_out_of_order, " i: ",i )
+				if i == self.sequence +1:					
 					self.sequence = i
 					send_sack_ack(self.socket, self, self.sequence)
 					self.received_out_of_order.remove(i)

@@ -94,8 +94,8 @@ def download_stop_and_wait():
 		except ConnectionResetError:
 			logger.error("Error: Conexion perdida")
 		except socket.timeout:
-			send_ack(client_socket, connection, sequence=header.sequence)
-			logger.warning(f"Reenviando ACK {header.sequence}")
+			send_ack(client_socket, connection, sequence=connection.sequence)
+			logger.warning(f"Reenviando ACK {connection.sequence}")
 			if connection.retrys > MAX_RETRIES:
 				# TODO Nunca se sube el retries
 				return False

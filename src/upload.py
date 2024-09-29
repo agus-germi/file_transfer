@@ -107,8 +107,11 @@ def upload_stop_and_wait(dir, name):
 def send_sack_data():
 	for seq, (key, data) in enumerate(connection.fragments.items()):
 		if seq >= SACK_WINDOW_SIZE or connection.window_sents > SEND_WINDOW_SIZE:  # Solo mandamos los primeros 8 elementos
+			if connection.window_sents > SEND_WINDOW_SIZE:
+				print("ASADASfasfadsdfasfg")
 			break
 		if key > connection.sequence + 30: # Nunca haya tanta difrencia entre el puntero del server y el mio
+			print("Se me lleno la cola")
 			break
 
 		# Print saber que segmentos quedan cuando quedan pocos
@@ -116,8 +119,6 @@ def send_sack_data():
 			print("FRAG: ", connection.fragments.keys())
 
 		send_data(client_socket, connection, data, sequence=key)
-		if key == 10:
-			send_data(client_socket, connection, data, sequence=14)
 		connection.window_sents += 1
 		print("Enviando paquete ", key)
 	
@@ -130,7 +131,8 @@ def handle_ack_sack(header: UDPHeader):
 	if header.has_ack():
 		connection.window_sents -= 1
 		if header.sequence > connection.sequence:
-			connection.window_sents -= header.sequence - connection.sequence
+			#connection.window_sents -= header.sequence - connection.sequence
+			connection.window_sents = 0
 			seq = connection.sequence
 			connection.sequence = header.sequence
 			print("ACK recibido ", header.sequence, " Nuevo sequence: ", connection.sequence)
@@ -163,6 +165,7 @@ def upload_with_sack_mati(dir, name):
 			handle_ack_sack(header)
 			while is_data_available(client_socket):
 				addr, header, data = receive_package(client_socket)
+				print("header sequence: ", header.sequence)
 				handle_ack_sack(header)
 
 			send_sack_data()
