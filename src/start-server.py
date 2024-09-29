@@ -128,7 +128,8 @@ def limpiar_recursos(signum, frame):
     print(f"Recibiendo señal {signum}, limpiando recursos...")
     for addr, connection in connections.items():
         connection.is_active = False
-        connection.join()
+        if connection.is_alive():
+            connection.join()
     server_socket.close()
     sys.exit(0)  # Salgo del programa con código 0 (éxito)
 
