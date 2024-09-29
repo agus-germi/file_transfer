@@ -122,8 +122,9 @@ def download_with_sack():
 					connection.sequence = header.sequence
 					connection.received_out_of_order.sort()
 					send_sack_ack(client_socket, connection, connection.sequence)
-					received_out_of_order = connection.received_out_of_order
+					received_out_of_order = list(connection.received_out_of_order)
 					for i in received_out_of_order:
+						print("recibidos: ",received_out_of_order, " i: ", i)
 						if i == connection.sequence +1:
 							connection.sequence = i
 							send_sack_ack(client_socket, connection, connection.sequence)
@@ -167,7 +168,7 @@ def download_with_sack():
 
 
 			send_sack_ack(client_socket, connection, connection.sequence, connection.received_out_of_order)
-			logger.info(f"SACK enviado. Último ACK: { connection.sequence }, SACK: {bin(header.sack)[2:].zfill(32)}")
+			#logger.info(f"SACK enviado. Último ACK: { connection.sequence }, SACK: {bin(header.sack)[2:].zfill(32)}")
 
 	return True
 
