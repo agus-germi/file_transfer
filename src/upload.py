@@ -15,7 +15,7 @@ from lib.connection import (
 	is_data_available,
 )
 from lib.udp import UDPFlags, UDPHeader
-from lib.constants import TIMEOUT, FRAGMENT_SIZE, SACK_WINDOW_SIZE, SEND_WINDOW_SIZE
+from lib.constants import TIMEOUT, FRAGMENT_SIZE, SACK_WINDOW_SIZE, SEND_WINDOW_SIZE, PACKAGE_SEND_DELAY
 
 from collections import deque
 
@@ -172,7 +172,7 @@ def upload_with_sack_mati(dir, name):
 
 			send_sack_data()
 			# Para que el cliente no sature al servidor con el envio de paquetes
-			time.sleep(0.01)
+			time.sleep(PACKAGE_SEND_DELAY)
 
 		except TimeoutError:
 			logger.error("TIMEOUT")
