@@ -119,9 +119,9 @@ def download_with_sack():
 					logger.info(f"Fragmento {header.sequence} recibido del servidor.")
 
 				if header.sequence == connection.sequence +1:
-					connection.sequence = header.sequence
-					connection.received_out_of_order.sort()
+					connection.sequence = header.sequence					
 					send_sack_ack(client_socket, connection, connection.sequence)
+					connection.received_out_of_order.sort()
 					received_out_of_order = list(connection.received_out_of_order)
 					for i in received_out_of_order:
 						print("recibidos: ",received_out_of_order, " i: ", i)

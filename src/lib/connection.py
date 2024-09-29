@@ -210,12 +210,13 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 
 		if message["header"].sequence == self.sequence +1:
 			self.sequence = message["header"].sequence
+			send_sack_ack(self.socket, self, self.sequence)
 			self.received_out_of_order.sort()
 			received_out_of_order = list(self.received_out_of_order)
 			for i in received_out_of_order:
-				if i == self.sequence +1:
-					send_sack_ack(self.socket, self, self.sequence)
+				if i == self.sequence +1:					
 					self.sequence = i
+					send_sack_ack(self.socket, self, self.sequence)
 					self.received_out_of_order.remove(i)
 				else:
 					break
