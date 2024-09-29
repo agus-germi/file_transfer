@@ -213,7 +213,7 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 			self.received_out_of_order.sort()
 			received_out_of_order = list(self.received_out_of_order)
 			for i in received_out_of_order:
-				if i == self.sequence +1:					
+				if i == self.sequence +1:
 					self.sequence = i
 					send_sack_ack(self.socket, self, self.sequence)
 					self.received_out_of_order.remove(i)
@@ -222,7 +222,7 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 
 		elif message["header"].sequence > self.sequence +1:
 			logger.warning(f"Fragmento {message['header'].sequence} recibido fuera de orden.")
-			if message["header"] not in self.received_out_of_order:
+			if message["header"].sequence not in self.received_out_of_order:
 				self.received_out_of_order.append(message["header"].sequence)
 
 		
