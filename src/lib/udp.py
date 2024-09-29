@@ -17,7 +17,7 @@ class UDPHeader:
 	def __init__(self, flags, sequence, sack):
 		self.flags = flags  # Flags (1 byte)
 		self.sequence = sequence  # Sequence number (4 bytes) #10
-		self.sack = sack # Ver que sea todo 0
+		self.sack = sack
 		
 		
 		#0000000 0000000 00000000 0000000
@@ -46,20 +46,19 @@ class UDPHeader:
 		return (self.sequence, sequences)
 	
 	
-	def set_sack(self, package_secuence):
-		if package_secuence == 0:
-			return 0
+	def set_sack(self, packages_secuence):
+		bits = 0
+		positions =  [x - self.sequence -1 for x in packages_secuence]
+    
+		# Iteramos sobre las posiciones dadas
+		for n in positions:
+			if 0 <= n < 32:  # Aseguramos que la posición no exceda los 32 bits
+				# Desplazamos 1 a la izquierda por (31 - n) posiciones para establecer el bit
+				bits |= (1 << (31 - n))
+			else:
+				print(f"Posición {n} fuera de rango. Debe estar entre 0 y 31.")
 		
-		sequence = package_secuence - self.sequence
-		bit_number = 0
-		if 0 < sequence < 32:
-			bit_number = 1 << sequence
-			
-		
-		print(f"Número con solo el bit {sequence} en 1: {bit_number} (en binario: {format(bit_number, '032b')})")
-		return bit_number
-	
-	
+		self.sack = bits
 
 
 	@classmethod

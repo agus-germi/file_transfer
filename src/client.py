@@ -12,7 +12,7 @@ from lib.connection import (
 	confirm_endfile,
 )
 from lib.udp import UDPFlags, UDPHeader
-from lib.constants import TIMEOUT, FRAGMENT_SIZE, WINDOW_SIZE
+from lib.constants import TIMEOUT, FRAGMENT_SIZE, SACK_WINDOW_SIZE
 
 
 UPLOAD = True
@@ -42,7 +42,7 @@ def connect_server():
 	try:
 		send_package(client_socket, connection, header, connection.path.encode())
 		addr, header, data = receive_package(client_socket)
-		print("Header: ", header.decode_sack())
+		print("Header: ", header.get_sequences())
 		print("Sack: ", format(header.sack, f'0{32}b'))
 
 		if header.has_ack() and header.has_start() and header.sequence == 0:

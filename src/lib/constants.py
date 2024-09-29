@@ -2,9 +2,9 @@ import struct
 
 
 
-TIMEOUT = 0.1  # Timeout in seconds
+TIMEOUT = 2  # Timeout in seconds
 MAX_RETRIES = 10 # Numero maximo de reintentos
-SACK_WINDOW_SIZE = 8 
+SACK_WINDOW_SIZE = 8
 
 HEADER_FORMAT = '!B I I'
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
