@@ -69,6 +69,8 @@ def download_stop_and_wait():
 		try:
 			addr, header, data = receive_package(client_socket)
 			if header.has_data():
+				# Cuando recibo data exitosamente reseteo el retries
+				connection.retrys = 0
 				if header.sequence not in connection.fragments:
 					connection.fragments[header.sequence] = data
 					connection.sequence = header.sequence
@@ -99,6 +101,7 @@ def download_stop_and_wait():
 			if connection.retrys > MAX_RETRIES:
 				# TODO Nunca se sube el retries
 				return False
+			connection.retrys += 1
 
 
 def download_with_sack():

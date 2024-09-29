@@ -6,7 +6,7 @@ import queue
 import os
 import select
 
-from lib.constants import TIMEOUT, TIMEOUT_SACK, FRAGMENT_SIZE, PACKAGE_SIZE, MAX_RETRIES, SACK_WINDOW_SIZE, SEND_WINDOW_SIZE, PACKAGE_SEND_DELAY
+from lib.constants import TIMEOUT, TIMEOUT_SACK, FRAGMENT_SIZE, PACKAGE_SIZE, MAX_RETRIES, SACK_WINDOW_SIZE, SEND_WINDOW_SIZE, PACKAGE_SEND_DELAY, MAX_TTL
 from lib.udp import UDPHeader, UDPFlags, UDPPackage
 from lib.logger import setup_logger
 
@@ -97,8 +97,8 @@ class ClientConnection(BaseConnection, threading.Thread):
 
 			except queue.Empty:
 				logger.warning(f"Cliente {self.addr} no ha enviado mensajes recientes.")
-				if self.ttl >= 100:
-					logger.warning(f"Cliente {self.addr} inactivo por 5 intentos.")
+				if self.ttl >= MAX_TTL:
+					logger.warning(f"Cliente {self.addr} inactivo por {MAX_TTL} intentos.")
 					self.is_active = False
 				elif self.ttl <= MAX_RETRIES and self.download:
 					self.send_data()
@@ -176,8 +176,8 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 
 			except queue.Empty:
 				logger.warning(f"Cliente {self.addr} no ha enviado mensajes recientes.")
-				if self.ttl >= 10:
-					logger.warning(f"Cliente {self.addr} inactivo por 5 intentos.")
+				if self.ttl >= MAX_TTL:
+					logger.warning(f"Cliente {self.addr} inactivo por {MAX_TTL} intentos.")
 					self.is_active = False
 				elif self.ttl <= MAX_RETRIES and self.download:
 					self.send_data_sack()

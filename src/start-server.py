@@ -133,6 +133,7 @@ def limpiar_recursos(signum, frame):
         connection.is_active = False
         if connection.is_alive():
             connection.join()
+        close_connection(server_socket,connection)
     server_socket.close()
     sys.exit(0)  # Salgo del programa con código 0 (éxito)
 
