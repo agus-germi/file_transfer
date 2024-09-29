@@ -59,7 +59,8 @@ class BaseConnection:
 			logger.error(f"Error: Archivo {self.path} no encontrado.")
 			self.is_active = False
 			# TODO No existe el socket en este contexto -> si el archivo no existe romperia
-			close_connection(self.socket, self, "Archivo no encontrado.")
+			if hasattr(self, 'socket'):
+				close_connection(self.socket, self, "Archivo no encontrado.")
 
 	
 	def send_end_confirmation(self):
