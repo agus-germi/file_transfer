@@ -128,6 +128,7 @@ def send_sack_data():
 
 def handle_ack_sack(header: UDPHeader):
 	if header.has_ack():
+		connection.window_sents -= 1
 		if header.sequence > connection.sequence:
 			connection.window_sents -= header.sequence - connection.sequence
 			seq = connection.sequence
