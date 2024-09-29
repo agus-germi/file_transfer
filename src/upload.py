@@ -1,4 +1,5 @@
 import socket
+import time
 import traceback
 from lib.logger import setup_logger
 from lib.utils import setup_signal_handling
@@ -120,9 +121,10 @@ def send_sack_data():
 
 		send_data(client_socket, connection, data, sequence=key)
 		connection.window_sents += 1
-		print("Enviando paquete ", key)
+		print("Enviando paquete ", key, " quedan : ", len(connection.fragments))
 	
 	if not connection.fragments:
+		print("enviando paquete de end, quedan: ", len(connection.fragments))
 		send_end(client_socket, connection)
 		connection.is_active = False
 
@@ -132,7 +134,7 @@ def handle_ack_sack(header: UDPHeader):
 		connection.window_sents -= 1
 		if header.sequence > connection.sequence:
 			#connection.window_sents -= header.sequence - connection.sequence
-			connection.window_sents = 0
+			#connection.window_sents = 0
 			seq = connection.sequence
 			connection.sequence = header.sequence
 			print("ACK recibido ", header.sequence, " Nuevo sequence: ", connection.sequence)
@@ -147,7 +149,7 @@ def handle_ack_sack(header: UDPHeader):
 			for i in sack:
 				print("Borrando fragmento SACK", i, " sequence: ", connection.sequence, " header " , header.sequence)
 				if i in connection.fragments:
-					connection.window_sents -= 1
+					#connection.window_sents -= 1
 					del connection.fragments[i]
 
 
@@ -169,9 +171,13 @@ def upload_with_sack_mati(dir, name):
 				handle_ack_sack(header)
 
 			send_sack_data()
+			# Para que el cliente no sature al servidor con el envio de paquetes
+			time.sleep(0.01)
 
 		except TimeoutError:
 			logger.error("TIMEOUT")
+			connection.window_sents -= SACK_WINDOW_SIZE
+			print("quedan fragmentos: ", len(connection.fragments))
 			send_sack_data()
 		except Exception as e:
 			logger.error("Traceback info:\n" + traceback.format_exc())
@@ -192,6 +198,7 @@ def handle_upload(dir, name, protocol):
 	except Exception as e:
 		logger.error(f"Error durante el upload: {e}")
 	finally:
+		print("Cierro conexion el finally")
 		close_connection(client_socket, connection)
 
 

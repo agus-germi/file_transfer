@@ -155,17 +155,19 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 
 		while self.is_active:
 			try:
-				message = self.message_queue.get(timeout=2)
+				message = self.message_queue.get(timeout=TIMEOUT)
 
 				if self.upload:
 					if message["header"].has_data():
+						print("RECIBI DATA ", message["header"].sequence)
 						self.receive_data(message)
 					elif message["header"].has_end():
+						print("RECIBI END ", message["header"].sequence)
 						self.send_end_confirmation()
 				else:
 					self.handle_sack_ack(message)
 					while not self.message_queue.empty():
-						message = self.message_queue.get(timeout=2)
+						message = self.message_queue.get(timeout=TIMEOUT)
 						self.handle_sack_ack(message)
 					self.send_data_sack()
 
