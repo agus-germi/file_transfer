@@ -104,7 +104,6 @@ def download_stop_and_wait():
 def download_with_sack():
 	connection.is_active = True
 	expected_sequence = 0
-	received_out_of_order = []
 
 	#diccionario auxiliar para guardar cuantos retries tuvo cada paquete
 	retries_per_packet = {}
@@ -121,22 +120,22 @@ def download_with_sack():
 
 				if header.sequence == connection.sequence +1:
 					connection.sequence = header.sequence
-					received_out_of_order.sort()
-					for i in received_out_of_order:
+					connection.received_out_of_order.sort()
+					for i in connection.received_out_of_order:
 						if i == connection.sequence +1:
 							send_sack_ack(client_socket, connection, connection.sequence)
 							connection.sequence = i
-							received_out_of_order.remove(i)		
+							connection.received_out_of_order.remove(i)		
 						else:
 							break
 
 				elif header.sequence > connection.sequence +1:
 					logger.warning(f"Fragmento {header.sequence} recibido fuera de orden.")
-					if header.sequence not in received_out_of_order:
-						received_out_of_order.append(header.sequence)
+					if header.sequence not in connection.received_out_of_order:
+						connection.received_out_of_order.append(header.sequence)
 
 				
-				send_sack_ack(client_socket, connection, connection.sequence, received_out_of_order)
+				send_sack_ack(client_socket, connection, connection.sequence, connection.received_out_of_order)
 				#time.sleep(0.05)
 				
 
@@ -165,8 +164,8 @@ def download_with_sack():
 				return False
 
 
-			send_sack_ack(client_socket, connection, connection.sequence, received_out_of_order)
-			logger.info(f"SACK enviado. Último ACK: { connection.sequence}, SACK: {bin(header.sack)[2:].zfill(32)}")
+			send_sack_ack(client_socket, connection, connection.sequence, connection.received_out_of_order)
+			logger.info(f"SACK enviado. Último ACK: { connection.sequence }, SACK: {bin(header.sack)[2:].zfill(32)}")
 
 	return True
 

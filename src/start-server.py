@@ -8,7 +8,8 @@ from lib.connection import (
     close_connection,
     send_start_confirmation,
     send_end_confirmation,
-    ClientConnection
+    ClientConnection,
+    ClientConnectionSACK
 )
 from lib.udp import UDPFlags, UDPHeader
 
@@ -19,13 +20,23 @@ def check_connection(
     server_socket, addr, header: UDPHeader, data: bytes, storage_dir: str, logger
 ):
     # TODO: Verificar que data se pueda decodear
-    connection = ClientConnection(
-        server_socket,
-        addr,
-        f"{storage_dir}/{data.decode()}",
-        download=header.has_download(),
-        protocol="sack" if header.has_protocol() else "stop_and_wait"
-    )
+    if header.has_protocol():
+        connection = ClientConnectionSACK(
+            server_socket,
+            addr,
+            f"{storage_dir}/{data.decode()}",
+            download=header.has_download(),
+            protocol="sack"
+        )
+    else:
+        connection = ClientConnection(
+            server_socket,
+            addr,
+            f"{storage_dir}/{data.decode()}",
+            download=header.has_download(),
+            protocol="stop_and_wait"
+        )
+        
 
     logger.info(
         f"Path: {data.decode()} | Upload: {connection.upload} | Download: {connection.download}"

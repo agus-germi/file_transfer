@@ -11,6 +11,7 @@ from lib.connection import (
 	send_data,
 	send_end,
 	confirm_send,
+	is_data_available,
 )
 from lib.udp import UDPFlags, UDPHeader
 from lib.constants import TIMEOUT, FRAGMENT_SIZE, SACK_WINDOW_SIZE
@@ -36,11 +37,16 @@ connection = Connection(
 )
 
 
-def connect_server():
+def connect_server(protocol):
 	header = UDPHeader(0, connection.sequence, 0)
 	header.set_flag(UDPFlags.START)
 	if DOWNLOAD:
 		header.set_flag(UDPFlags.DOWNLOAD)
+	if protocol == "stop_and_wait":
+		header.clear_flag(UDPFlags.PROTOCOL)
+	elif protocol == "sack":
+		header.set_flag(UDPFlags.PROTOCOL)
+
 	try:
 		send_package(client_socket, connection, header, connection.path.encode())
 		addr, header, data = receive_package(client_socket)
@@ -127,6 +133,74 @@ def upload_stop_and_wait(dir, name):
 						sequence=connection.sequence,
 					)
 		
+
+
+def send_sack_data():
+	for seq, (key, data) in enumerate(connection.fragments.items()):
+		if seq >= SACK_WINDOW_SIZE or connection.window_sents > SACK_WINDOW_SIZE*2:  # Solo mandamos los primeros 8 elementos
+			break
+		if key > connection.sequence + 30: # Nunca haya tanta difrencia entre el puntero del server y el mio
+			break
+
+		# Print saber que segmentos quedan cuando quedan pocos
+		if len(connection.fragments) < 10:
+			print("FRAG: ", connection.fragments.keys())
+
+		send_data(client_socket, connection, data, sequence=key)
+		connection.window_sents += 1
+		print("Enviando paquete ", key)
+	
+	if not connection.fragments:
+		send_end(client_socket, connection)
+		connection.is_active = False
+
+
+def handle_ack_sack(header: UDPHeader):
+	if header.has_ack():
+		if header.sequence > connection.sequence:
+			connection.window_sents -= header.sequence - connection.sequence
+			seq = connection.sequence
+			connection.sequence = header.sequence
+			print("ACK recibido ", header.sequence, " Nuevo sequence: ", connection.sequence)
+
+			for i in range(seq, header.sequence +1):
+				if i in connection.fragments:
+					print("Borrando fragmento ", i)
+					del connection.fragments[i]
+			
+		else:
+			sack = header.get_sequences()[1]
+			for i in sack:
+				print("Borrando fragmento SACK", i, " sequence: ", connection.sequence, " header " , header.sequence)
+				if i in connection.fragments:
+					connection.window_sents -= 1
+					del connection.fragments[i]
+
+
+
+def upload_with_sack_mati(dir, name):
+	try: 
+		connection.sequence = 1  # Inicia el número de secuencia en 1
+		connection.path = f"{dir}/{name}"
+		connection.get_fragments()
+		connection.is_active = True
+
+		send_sack_data()
+		while connection.is_active:
+			addr, header, data = receive_package(client_socket)
+			handle_ack_sack(header)
+			while is_data_available(client_socket):
+				addr, header, data = receive_package(client_socket)
+				handle_ack_sack(header)
+
+			send_sack_data()
+		
+
+	except TimeoutError:
+		logger.error("TIMEOUT")
+	except:
+		logger.error("Traceback info:\n" + traceback.format_exc())
+
 
 
 def upload_with_sack(dir, name):
@@ -220,7 +294,7 @@ def handle_upload(dir, name, protocol):
 		if protocol == "stop_and_wait":
 			upload_stop_and_wait(dir, name)
 		elif protocol == "sack":
-			upload_with_sack(dir, name)
+			upload_with_sack_mati(dir, name)
 		else:
 			logger.error(f"Protocolo no soportado: {protocol}")
 			raise ValueError(f"Protocolo no soportado: {protocol}")
@@ -236,7 +310,7 @@ def handle_upload(dir, name, protocol):
 if __name__ == "__main__":
 	setup_signal_handling()
 	try:
-		if connect_server():
+		if connect_server(args.protocol):
 			handle_upload(args.src, args.name, args.protocol)
 	except Exception as e:
 		logger.error(f"Error en main: {e}")
