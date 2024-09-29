@@ -41,8 +41,6 @@ class BaseConnection:
 		if not os.path.exists(dir):
 			os.makedirs(dir)
 
-		# TODO Ver de ordernar self.fragments en orden ascendente para que el file se guarde bien
-		# Pero creo que esta sorted, PROBAR
 		with open(output_path, "wb") as f:
 			for i in sorted(self.fragments.keys()):
 				f.write(self.fragments[i])
