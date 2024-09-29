@@ -14,7 +14,7 @@ from lib.connection import (
 	is_data_available,
 )
 from lib.udp import UDPFlags, UDPHeader
-from lib.constants import TIMEOUT, FRAGMENT_SIZE, SACK_WINDOW_SIZE
+from lib.constants import TIMEOUT, FRAGMENT_SIZE, SACK_WINDOW_SIZE, SEND_WINDOW_SIZE
 
 from collections import deque
 
@@ -106,7 +106,7 @@ def upload_stop_and_wait(dir, name):
 
 def send_sack_data():
 	for seq, (key, data) in enumerate(connection.fragments.items()):
-		if seq >= SACK_WINDOW_SIZE or connection.window_sents > SACK_WINDOW_SIZE*2:  # Solo mandamos los primeros 8 elementos
+		if seq >= SACK_WINDOW_SIZE or connection.window_sents > SEND_WINDOW_SIZE:  # Solo mandamos los primeros 8 elementos
 			break
 		if key > connection.sequence + 30: # Nunca haya tanta difrencia entre el puntero del server y el mio
 			break
