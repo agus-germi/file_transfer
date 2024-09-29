@@ -184,7 +184,7 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 
 	def send_data_sack(self):
 		for seq, (key, data) in enumerate(self.fragments.items()):
-			if seq >= SACK_WINDOW_SIZE or self.window_sents > SACK_WINDOW_SIZE*2:  # Solo mandamos los primeros 8 elementos
+			if seq >= SACK_WINDOW_SIZE or self.window_sents > SACK_WINDOW_SIZE:  # Solo mandamos los primeros 8 elementos
 				break
 			if key > self.sequence + 30:
 				break
@@ -245,9 +245,9 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 				
 			else:
 				sack = message["header"].get_sequences()[1]
-				for i in sack:
-					print("Borrando fragmento SACK", i, " sequence: ", self.sequence, " header " , message["header"].sequence)
+				for i in sack:					
 					if i in self.fragments:
+						print("Borrando fragmento SACK", i, " sequence: ", self.sequence, " header " , message["header"].sequence)
 						self.window_sents -= 1
 						del self.fragments[i]
 
