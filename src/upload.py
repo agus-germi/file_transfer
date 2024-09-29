@@ -15,7 +15,7 @@ from lib.connection import (
 	is_data_available,
 )
 from lib.udp import UDPFlags, UDPHeader
-from lib.constants import TIMEOUT, FRAGMENT_SIZE, SACK_WINDOW_SIZE, SEND_WINDOW_SIZE, PACKAGE_SEND_DELAY
+from lib.constants import TIMEOUT, TIMEOUT_SACK, FRAGMENT_SIZE, SACK_WINDOW_SIZE, SEND_WINDOW_SIZE, PACKAGE_SEND_DELAY
 
 from collections import deque
 
@@ -153,8 +153,8 @@ def handle_ack_sack(header: UDPHeader):
 					del connection.fragments[i]
 
 
-
-def upload_with_sack_mati(dir, name):
+def upload_with_sack(dir, name):
+	client_socket.settimeout(TIMEOUT_SACK)
 	connection.sequence = 1  # Inicia el número de secuencia en 1
 	connection.path = f"{dir}/{name}"
 	connection.get_fragments()
@@ -188,7 +188,7 @@ def handle_upload(dir, name, protocol):
 		if protocol == "stop_and_wait":
 			upload_stop_and_wait(dir, name)
 		elif protocol == "sack":
-			upload_with_sack_mati(dir, name)
+			upload_with_sack(dir, name)
 		else:
 			logger.error(f"Protocolo no soportado: {protocol}")
 			raise ValueError(f"Protocolo no soportado: {protocol}")

@@ -1,11 +1,12 @@
 import struct
+import time
 import socket
 import threading
 import queue
 import os
 import select
 
-from lib.constants import TIMEOUT, FRAGMENT_SIZE, PACKAGE_SIZE, MAX_RETRIES, SACK_WINDOW_SIZE, SEND_WINDOW_SIZE
+from lib.constants import TIMEOUT, TIMEOUT_SACK, FRAGMENT_SIZE, PACKAGE_SIZE, MAX_RETRIES, SACK_WINDOW_SIZE, SEND_WINDOW_SIZE, PACKAGE_SEND_DELAY
 from lib.udp import UDPHeader, UDPFlags, UDPPackage
 from lib.logger import setup_logger
 
@@ -155,7 +156,7 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 
 		while self.is_active:
 			try:
-				message = self.message_queue.get(timeout=TIMEOUT)
+				message = self.message_queue.get(timeout=TIMEOUT_SACK)
 
 				if self.upload:
 					if message["header"].has_data():
@@ -167,10 +168,11 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 				else:
 					self.handle_sack_ack(message)
 					while not self.message_queue.empty():
-						message = self.message_queue.get(timeout=TIMEOUT)
+						message = self.message_queue.get(timeout=TIMEOUT_SACK)
 						self.handle_sack_ack(message)
 					self.send_data_sack()
-
+					# Para que el cliente no sature al servidor con el envio de paquetes
+					time.sleep(PACKAGE_SEND_DELAY)
 
 			except queue.Empty:
 				logger.warning(f"Cliente {self.addr} no ha enviado mensajes recientes.")
