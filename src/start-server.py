@@ -66,7 +66,8 @@ def handle_connection(server_socket, storage_dir, logger):
         elif header.has_flag(UDPFlags.END) and header.has_flag(UDPFlags.ACK):
             connection.is_active = False
             connection.join()
-            # TODO Tiene que mandar close?
+            logger.info(f"Mensaje Recibido: {addr} [END]")
+            close_connection(server_socket, connection)
 
         # Se recibio un paquete de End
         elif header.has_flag(UDPFlags.END) and not connection.is_active:

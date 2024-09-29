@@ -7,7 +7,7 @@ import time
 from lib.parser import parse_download_args
 from lib.logger import setup_logger
 from lib.utils import setup_signal_handling
-from lib.connection import Connection, CloseConnectionException, send_package, receive_package, close_connection, send_end, send_ack, confirm_endfile, send_sack_ack
+from lib.connection import Connection, CloseConnectionException, send_package, receive_package, close_connection, send_end, send_ack, send_end_confirmation, send_sack_ack, confirm_send
 from lib.udp import UDPFlags, UDPHeader
 from lib.constants import MAX_RETRIES, TIMEOUT, FRAGMENT_SIZE
 
@@ -33,7 +33,7 @@ connection = Connection(
 
 
 def connect_server(protocol):
-	header = UDPHeader(0, connection.sequence, 0)
+	header = UDPHeader(connection.sequence)
 	header.set_flag(UDPFlags.START)
 	if DOWNLOAD:
 		header.set_flag(UDPFlags.DOWNLOAD)
@@ -84,7 +84,6 @@ def download_stop_and_wait():
 			elif header.has_end():
 				connection.is_active = False
 				connection.save_file()
-				# TODO Enviar confirmacion de fin de archivo
 			
 			# Se cierra conexion desde el servidor
 			elif header.has_close():
@@ -137,17 +136,13 @@ def download_with_sack():
 						received_out_of_order.append(header.sequence)
 
 				
-				# Preparar y enviar SACK al servidor
 				send_sack_ack(client_socket, connection, connection.sequence, received_out_of_order)
-				#logger.info(f"SACK enviado. Último ACK: { connection.sequence}, SACK: {format(header.sack, '032b')}")
-				time.sleep(0.05)
+				#time.sleep(0.05)
 				
 
 			elif header.has_end():
 				connection.is_active = False
 				connection.save_file()
-				# TODO: El cliente deberia avisar que hay que matar la conexion
-				# send_end_confirmation(client_socket, connection)
 				logger.info("Archivo recibido completamente.")
 			
 			elif header.has_close():
@@ -187,7 +182,7 @@ def handle_download(protocol):
 		logger.error(f"Protocolo no soportado: {protocol}")
 		raise ValueError(f"Protocolo no soportado: {protocol}")
 
-	#confirm_endfile(client_socket, connection)
+	confirm_send(client_socket, connection, send_end_confirmation)
 	logger.info("Archivo recibido exitosamente.")
 	
 	try:

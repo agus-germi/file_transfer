@@ -15,13 +15,14 @@ logger = setup_logger(verbose=False, quiet=False)
 class BaseConnection:
 	"""Clase base que contiene atributos y comportamientos comunes de conexiones."""
 
-	def __init__(self, addr, path=None, sequence=0, download=False):
+	def __init__(self, addr, path=None, sequence=0, download=False, protocol="stop_and_wait"):
 		self.addr = addr
 		self.path = path
 		self.sequence = sequence
 		self.is_active = False
 		self.download = download
 		self.upload = not download
+		self.protocol = protocol
 		self.fragments = {}
 		self.retrys = 0
 
@@ -56,17 +57,13 @@ class BaseConnection:
 
 
 class ClientConnection(BaseConnection, threading.Thread):
-	def __init__(self, socket: socket.socket, addr, path, download=False, protocol=""):
-		super().__init__(addr, path, download=download)
+	def __init__(self, socket: socket.socket, addr, path, download=False, protocol="stop_and_wait"):
+		super().__init__(addr, path, download=download, protocol=protocol) 
 		threading.Thread.__init__(self)
 		self.socket = socket
 		self.message_queue = queue.Queue()
 		self.ttl = 0
-		self.protocol = protocol
-		self.window_start = 0
-		self.window_end = SACK_WINDOW_SIZE
-		self.unacked_packets = {}
-		self.sents = 0
+		self.window_sents = 0
 
 	def run(self):
 		if self.download:
@@ -92,8 +89,7 @@ class ClientConnection(BaseConnection, threading.Thread):
 						self.handle_sack_ack(message)
 						while not self.message_queue.empty():
 							message = self.message_queue.get(timeout=2)
-							self.handle_sack_ack(message)							
-							print("Jorge")
+							self.handle_sack_ack(message)
 						self.send_data_sack()
 					else:
 						self.send_data(message)
@@ -116,10 +112,8 @@ class ClientConnection(BaseConnection, threading.Thread):
 
 
 	def send_data_sack(self):
-		#for seq in range(self.window_start, min(self.window_end, len(self.fragments))):
-			#if seq not in self.unacked_packets:
 		for seq, (key, data) in enumerate(self.fragments.items()):
-			if seq >= SACK_WINDOW_SIZE or self.sents > SACK_WINDOW_SIZE:  # Solo mandamos los primeros 8 elementos
+			if seq >= SACK_WINDOW_SIZE or self.window_sents > SACK_WINDOW_SIZE:  # Solo mandamos los primeros 8 elementos
 				break
 			if key > self.sequence + 30:
 				break
@@ -128,9 +122,7 @@ class ClientConnection(BaseConnection, threading.Thread):
 
 
 			send_data(self.socket, self, data, sequence=key)
-			if int(key) == 11:
-				send_data(self.socket, self, data, sequence=14)
-			self.sents += 1
+			self.window_sents += 1
 			print("Enviando paquete ", key)
 		
 		if not self.fragments:
@@ -141,10 +133,10 @@ class ClientConnection(BaseConnection, threading.Thread):
 	def handle_sack_ack(self, message):
 		if message["header"].has_ack():
 			if message["header"].sequence > self.sequence:
-				self.sents -= message["header"].sequence - self.sequence
+				self.window_sents -= message["header"].sequence - self.sequence
 				self.sequence = message["header"].sequence				
 				print("ACK recibido ", message["header"].sequence, " Nuevo sequence: ", self.sequence)
-				# TODO VERR
+
 				for i in range(self.sequence, message["header"].sequence +1):
 					if i in self.fragments:
 						print("Borrando fragmento ", i)
@@ -154,12 +146,9 @@ class ClientConnection(BaseConnection, threading.Thread):
 				sack = message["header"].get_sequences()[1]
 				for i in sack:
 					print("Borrando fragmento SACK", i, " sequence: ", self.sequence, " header " , message["header"].sequence)
-					self.sents -= 1
 					if i in self.fragments:
+						self.window_sents -= 1
 						del self.fragments[i]
-
-			#logger.info(f"SACK enviado. Último ACK: {ack_seq - 1}, SACK: {bin(sack_bits)[2:].zfill(32)}")
-			#print(f"Unacked packets despues de procesar el SACK: {self.unacked_packets.keys()}")
 
 
 	def put_message(self, message):
@@ -217,7 +206,7 @@ def send_data(
 	socket: socket.socket, connection: Connection, data: bytes, sequence=None
 ):
 	seq = sequence if sequence else connection.sequence
-	header = UDPHeader(0, seq, 0)
+	header = UDPHeader(seq)
 	header.set_flag(UDPFlags.DATA)
 	package = UDPPackage().pack(header, data)
 	socket.sendto(package, connection.addr)
@@ -225,7 +214,7 @@ def send_data(
 
 def send_ack(socket: socket.socket, connection: Connection, sequence=None):
 	seq = sequence if sequence else connection.sequence
-	header = UDPHeader(0, seq, 0)
+	header = UDPHeader(seq)
 	header.set_flag(UDPFlags.ACK)
 	package = UDPPackage().pack(header, b"")
 	socket.sendto(package, connection.addr)
@@ -233,7 +222,7 @@ def send_ack(socket: socket.socket, connection: Connection, sequence=None):
 
 def send_sack_ack(socket: socket.socket, connection: Connection, sequence=None, sack_packages=[]):
 	seq = sequence if sequence else connection.sequence
-	header = UDPHeader(0, connection.sequence, 0)
+	header = UDPHeader(connection.sequence)
 	header.set_flag(UDPFlags.ACK)
 	header.set_flag(UDPFlags.SACK)
 	header.set_sack(sack_packages)
@@ -244,14 +233,14 @@ def send_sack_ack(socket: socket.socket, connection: Connection, sequence=None, 
 
 
 def send_end(socket: socket.socket, connection: Connection):
-	header = UDPHeader(0, connection.sequence, 0)
+	header = UDPHeader(connection.sequence)
 	header.set_flag(UDPFlags.END)
 	package = UDPPackage().pack(header, b"")
 	socket.sendto(package, connection.addr)
 
 
 def send_end_confirmation(socket: socket.socket, connection: Connection):
-	header = UDPHeader(0, connection.sequence, 0)
+	header = UDPHeader(connection.sequence)
 	header.set_flag(UDPFlags.END)
 	header.set_flag(UDPFlags.ACK)
 	package = UDPPackage().pack(header, b"")
@@ -259,7 +248,7 @@ def send_end_confirmation(socket: socket.socket, connection: Connection):
 
 
 def send_start_confirmation(socket: socket.socket, connection: Connection):
-	header = UDPHeader(0, 0, 0)
+	header = UDPHeader(0)
 	#header.set_sack([11,15])
 	header.set_flag(UDPFlags.START)
 	header.set_flag(UDPFlags.ACK)
@@ -275,7 +264,7 @@ def receive_package(socket: socket.socket):
 
 
 def close_connection(socket: socket.socket, connection: Connection, data=""):
-	header = UDPHeader(0, 0, 0)
+	header = UDPHeader(0)
 	header.set_flag(UDPFlags.CLOSE)
 	logger.info("Enviando paquete de cierre ")
 	send_package(socket, connection, header, data.encode())
@@ -289,13 +278,13 @@ def reject_connection(socket: socket.socket, connection: Connection):
 		pass
 	finally:
 		logger.info(f"Cliente Rechazado: {connection.addr}")
-		
 
-# Commont to clients
-def confirm_endfile(socket, connection):
+
+# Common to clients
+def confirm_send(socket, connection, function):
 	for i in range(3):
 		try:
-			send_end(socket, connection)
+			function(socket, connection)
 			addr, header, data = receive_package(socket)
 			if header.has_end() and header.has_ack():
 				break

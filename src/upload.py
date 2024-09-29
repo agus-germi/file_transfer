@@ -10,7 +10,7 @@ from lib.connection import (
 	close_connection,
 	send_data,
 	send_end,
-	confirm_endfile,
+	confirm_send,
 )
 from lib.udp import UDPFlags, UDPHeader
 from lib.constants import TIMEOUT, FRAGMENT_SIZE, SACK_WINDOW_SIZE
@@ -224,8 +224,8 @@ def handle_upload(dir, name, protocol):
 		else:
 			logger.error(f"Protocolo no soportado: {protocol}")
 			raise ValueError(f"Protocolo no soportado: {protocol}")
-
-		confirm_endfile(client_socket, connection)
+		
+		confirm_send(client_socket, connection, send_end)
 		logger.info("Archivo enviado exitosamente.")
 	except Exception as e:
 		logger.error(f"Error durante el upload: {e}")

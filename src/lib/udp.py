@@ -14,15 +14,11 @@ class UDPHeader:
 	HEADER_FORMAT = "!B I I"
 	HEADER_SIZE = struct.calcsize(HEADER_FORMAT)  # Size of the header in bytes
 
-	def __init__(self, flags, sequence, sack):
+	def __init__(self, sequence, flags = 0, sack = 0):
 		self.flags = flags  # Flags (1 byte)
-		self.sequence = sequence  # Sequence number (4 bytes) #10
-		self.sack = sack
+		self.sequence = sequence  # Sequence number (4 bytes) 
+		self.sack = sack # SACK Sequence (4 bytes) 
 		
-		
-		#0000000 0000000 00000000 0000000
-		
-		# No recibi: 11
 
 	def pack(self):
 		"""Pack the header into binary format."""
@@ -69,7 +65,7 @@ class UDPHeader:
 	def unpack(cls, binary_header):
 		"""Unpack the binary header and return an instance of ProtocolHeader."""
 		flags, sequence, sack = struct.unpack(cls.HEADER_FORMAT, binary_header)
-		return cls(flags, sequence, sack)
+		return cls(sequence, flags=flags, sack=sack)
 
 	def has_flag(self, flag):
 		"""Checks if the flag is set."""
@@ -133,7 +129,7 @@ class UDPFlags:
 	START = 0b00000001
 	DATA = 0b00000010
 	ACK = 0b00000100
-	SACK = 0b00100000  # TODO: VER !
+	SACK = 0b00100000
 	END = 0b00001000
 	CLOSE = 0b00010000
 	PROTOCOL = 0b10000000
