@@ -206,7 +206,7 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 	def receive_data(self, message):
 		if message["header"].sequence not in self.fragments:
 			self.fragments[message["header"].sequence] = message["data"]
-			logger.info(f"Fragmento {message["header"].sequence} recibido del cliente.")
+			logger.info(f"Fragmento {message['header'].sequence} recibido del cliente.")
 
 		if message["header"].sequence == self.sequence +1:
 			self.sequence = message["header"].sequence
@@ -220,7 +220,7 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 					break
 
 		elif message["header"].sequence > self.sequence +1:
-			logger.warning(f"Fragmento {message["header"].sequence} recibido fuera de orden.")
+			logger.warning(f"Fragmento {message['header'].sequence} recibido fuera de orden.")
 			if message["header"] not in self.received_out_of_order:
 				self.received_out_of_order.append(message["header"].sequence)
 
