@@ -67,71 +67,41 @@ def connect_server(protocol):
 		return False
 
 
-def upload_file(dir, name):
-	"""Envía un archivo al servidor en fragmentos usando UDP."""
-	file_dir = f"{dir}/{name}"
-	connection.sequence = 0
-	with open(file_dir, "rb") as f:
-		while True:
-			fragment = f.read(FRAGMENT_SIZE)
-			if not fragment:
-				break
-
-			send_data(client_socket, connection, fragment, sequence=connection.sequence)
-			logger.info(f"Fragmento {connection.sequence} enviado al servidor.")
-
-			addr, header, data = receive_package(client_socket)
-
-			if header.has_ack() and header.sequence == connection.sequence:
-				logger.info(f"ACK {connection.sequence} recibido del servidor.")
-				connection.sequence += 1
-			else:
-				logger.error(
-					f"Error: ACK {connection.sequence} no recibido del servidor."
-				)
-				break
-
-		send_end(client_socket, connection)
-		close_connection(client_socket, connection)
-		logger.info("Archivo enviado exitosamente.")
-
-
 def upload_stop_and_wait(dir, name):
 	"""Envía un archivo al servidor en fragmentos usando UDP."""
 	file_dir = f"{dir}/{name}"
+	connection.path = f"{dir}/{name}"
+	connection.get_fragments()
+	connection.is_active = True
 
-	with open(file_dir, "rb") as file:
-		connection.sequence = 0
-		while True:
-			fragment = file.read(FRAGMENT_SIZE)
-			if not fragment:
-				break
+	while connection.fragments and connection.is_active:
+		key = next(iter(connection.fragments))
+		data = connection.fragments[key]
+		send_data(client_socket, connection, data, sequence=connection.sequence)
+		logger.info(f"Fragmento {connection.sequence} enviado al servidor.")
 
-			send_data(client_socket, connection, fragment, sequence=connection.sequence)
-			logger.info(f"Fragmento {connection.sequence} enviado al servidor.")
+		try:
+			addr, header, data = receive_package(client_socket)
+			if header.has_ack() and header.sequence == connection.sequence:
+				logger.info(f"ACK {connection.sequence} recibido del servidor.")
+				connection.sequence += 1
+				if header.sequence in connection.fragments:
+					connection.fragments.pop(header.sequence)
+			else:
+				logger.error(
+					f"Received ACK {header.sequence} is not {connection.sequence} "
+				)
 
-			while True:
-				try:
-					addr, header, data = receive_package(client_socket)
-					if header.has_ack() and header.sequence == connection.sequence:
-						logger.info(f"ACK {connection.sequence} recibido del servidor.")
-						connection.sequence += 1
-						break
-					else:
-						logger.error(
-							f"Received ACK {header.sequence} is not {connection.sequence} "
-						)
-
-				except TimeoutError:
-					logger.error(
-						f"ACK {connection.sequence} no recibido del servidor. Reenviando."
-					)
-					send_data(
-						client_socket,
-						connection,
-						fragment,
-						sequence=connection.sequence,
-					)
+		except TimeoutError:
+			logger.error(
+				f"ACK {connection.sequence} no recibido del servidor. Reenviando."
+			)
+			send_data(
+				client_socket,
+				connection,
+				data,
+				sequence=connection.sequence,
+			)
 
 
 def send_sack_data():

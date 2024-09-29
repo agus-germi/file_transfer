@@ -12,8 +12,21 @@ from lib.connection import (
     ClientConnectionSACK
 )
 from lib.udp import UDPFlags, UDPHeader
+import signal
+import sys
+import os
+
 
 connections = {}
+args = parse_server_args()
+logger = setup_logger(verbose=args.verbose, quiet=args.quiet)
+
+# Create a UDP socket
+server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+server_address = (args.host, args.port)
+logger.info(f"Server listening on {server_address}")
+server_socket.bind(server_address)
+
 
 
 def check_connection(
@@ -104,24 +117,33 @@ def handle_connection(server_socket, storage_dir, logger):
 
 
 def start_server():
-    args = parse_server_args()
-    logger = setup_logger(verbose=args.verbose, quiet=args.quiet)
-
-    # Create a UDP socket
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    server_address = (args.host, args.port)
-    logger.info(f"Server listening on {server_address}")
-    server_socket.bind(server_address)
-
     try:
         while True:
             handle_connection(server_socket, args.storage, logger)
     except KeyboardInterrupt:
-        server_socket.close()
         logger.info("\nInterruption detected. The program has been stopped.")
+
+
+def limpiar_recursos(signum, frame):
+    print(f"Recibiendo señal {signum}, limpiando recursos...")
+    for addr, connection in connections.items():
+        connection.is_active = False
+        connection.join()
+    server_socket.close()
+    sys.exit(0)  # Salgo del programa con código 0 (éxito)
+
+
+def setup_signal_handling():
+    signal.signal(signal.SIGINT, limpiar_recursos)
+    signal.signal(signal.SIGTERM, limpiar_recursos)
+    if os.name != "nt":
+        signal.signal(signal.SIGQUIT, limpiar_recursos)
+        signal.signal(signal.SIGHUP, limpiar_recursos)
+
 
 
 if __name__ == "__main__":
     setup_signal_handling()
     # TODO Limpiar todos los recursos de connection con su respectivo JOIN al cerrar abruptamente
     start_server()
+    limpiar_recursos(0, 0)
