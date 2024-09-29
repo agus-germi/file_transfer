@@ -205,7 +205,7 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 	def receive_data(self, message):
 		if message["header"].sequence not in self.fragments:
 			self.fragments[message["header"].sequence] = message["data"]
-			logger.info(f"Fragmento {message["header"].sequence} recibido del servidor.")
+			logger.info(f"Fragmento {message["header"].sequence} recibido del cliente.")
 
 		if message["header"].sequence == self.sequence +1:
 			self.sequence = message["header"].sequence
@@ -221,7 +221,7 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 		elif message["header"].sequence > self.sequence +1:
 			logger.warning(f"Fragmento {message["header"].sequence} recibido fuera de orden.")
 			if message["header"] not in self.received_out_of_order:
-				self.received_out_of_order.append(message["header"])
+				self.received_out_of_order.append(message["header"].sequence)
 
 		
 		send_sack_ack(self.socket, self, self.sequence, self.received_out_of_order)
@@ -234,7 +234,7 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 			if message["header"].sequence > self.sequence:
 				self.window_sents -= message["header"].sequence - self.sequence
 				seq = self.sequence
-				self.sequence = message["header"].sequence	
+				self.sequence = message["header"].sequence
 				print("ACK recibido ", message["header"].sequence, " Nuevo sequence: ", self.sequence)
 
 				for i in range(seq, message["header"].sequence +1):

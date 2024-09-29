@@ -132,7 +132,6 @@ def upload_stop_and_wait(dir, name):
 						fragment,
 						sequence=connection.sequence,
 					)
-		
 
 
 def send_sack_data():
@@ -147,6 +146,8 @@ def send_sack_data():
 			print("FRAG: ", connection.fragments.keys())
 
 		send_data(client_socket, connection, data, sequence=key)
+		if key == 10:
+			send_data(client_socket, connection, data, sequence=14)
 		connection.window_sents += 1
 		print("Enviando paquete ", key)
 	

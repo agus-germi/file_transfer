@@ -46,7 +46,7 @@ class UDPHeader:
 			logger.error(f"Error al obtener la secuencia: {e}")
 	
 	
-	def set_sack(self, packages_secuence):
+	def set_sack(self, packages_secuence: list):
 		bits = 0
 		positions =  [x - self.sequence -1 for x in packages_secuence]
     
