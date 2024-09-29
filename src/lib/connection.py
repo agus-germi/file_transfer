@@ -4,7 +4,7 @@ import threading
 import queue
 import os
 
-from lib.constants import TIMEOUT, FRAGMENT_SIZE, PACKAGE_SIZE, MAX_RETRIES
+from lib.constants import TIMEOUT, FRAGMENT_SIZE, PACKAGE_SIZE, MAX_RETRIES, SACK_WINDOW_SIZE
 from lib.udp import UDPHeader, UDPFlags, UDPPackage
 from lib.logger import setup_logger
 
@@ -39,14 +39,14 @@ class BaseConnection:
 		with open(output_path, "wb") as f:
 			for i in sorted(self.fragments.keys()):
 				f.write(self.fragments[i])
-		print(f"Archivo guardado en {output_path}")
+		logger.info(f"Archivo guardado en {output_path}")
 
 
 	def get_fragments(self):
 		try:
 			with open(self.path, "rb") as f:
 				for i, fragment in enumerate(iter(lambda: f.read(FRAGMENT_SIZE), b"")):
-					self.fragments[i] = fragment
+					self.fragments[i+1] = fragment
 			print("Fragments listos para enviar ", len(self.fragments))
 		except FileNotFoundError:
 			logger.error(f"Error: Archivo {self.path} no encontrado.")
@@ -56,20 +56,25 @@ class BaseConnection:
 
 
 class ClientConnection(BaseConnection, threading.Thread):
-	"""Clase que maneja la conexión y comunicación con un cliente específico en UDP."""
-	
 	def __init__(self, socket: socket.socket, addr, path, download=False, protocol=""):
 		super().__init__(addr, path, download=download)
 		threading.Thread.__init__(self)
 		self.socket = socket
 		self.message_queue = queue.Queue()
 		self.ttl = 0
-
+		self.protocol = protocol
+		self.window_start = 0
+		self.window_end = SACK_WINDOW_SIZE
+		self.unacked_packets = {}
+		self.sents = 0
 
 	def run(self):
 		if self.download:
 			self.get_fragments()
-			self.send_data()
+			if self.protocol == "sack":
+				self.send_data_sack()
+			else:
+				self.send_data()
 
 		while self.is_active:
 			try:
@@ -83,7 +88,15 @@ class ClientConnection(BaseConnection, threading.Thread):
 						self.save_file()
 						self.is_active = False
 				else:
-					self.send_data(message)
+					if self.protocol == "sack":
+						self.handle_sack_ack(message)
+						while not self.message_queue.empty():
+							message = self.message_queue.get(timeout=2)
+							self.handle_sack_ack(message)							
+							print("Jorge")
+						self.send_data_sack()
+					else:
+						self.send_data(message)
 
 			except queue.Empty:
 				logger.warning(f"Cliente {self.addr} no ha enviado mensajes recientes.")
@@ -91,12 +104,62 @@ class ClientConnection(BaseConnection, threading.Thread):
 					logger.warning(f"Cliente {self.addr} inactivo por 5 intentos.")
 					self.is_active = False
 				elif self.ttl <= MAX_RETRIES and self.download:
-					self.send_data()
+					if self.protocol == "sack":
+						self.send_data_sack()
+					else:
+						self.send_data()
 
 				self.ttl += 1
 			except Exception as e:
 				logger.error(f"Error con {self.addr}: {e}")
 				self.is_active = False
+
+
+	def send_data_sack(self):
+		#for seq in range(self.window_start, min(self.window_end, len(self.fragments))):
+			#if seq not in self.unacked_packets:
+		for seq, (key, data) in enumerate(self.fragments.items()):
+			if seq >= SACK_WINDOW_SIZE or self.sents > SACK_WINDOW_SIZE:  # Solo mandamos los primeros 8 elementos
+				break
+			if key > self.sequence + 30:
+				break
+			if len(self.fragments) < 10:
+				print("FRAG: ", self.fragments.keys())
+
+
+			send_data(self.socket, self, data, sequence=key)
+			if int(key) == 11:
+				send_data(self.socket, self, data, sequence=14)
+			self.sents += 1
+			print("Enviando paquete ", key)
+		
+		if not self.fragments:
+			send_end(self.socket, self)
+			self.is_active = False
+
+
+	def handle_sack_ack(self, message):
+		if message["header"].has_ack():
+			if message["header"].sequence > self.sequence:
+				self.sents -= message["header"].sequence - self.sequence
+				self.sequence = message["header"].sequence				
+				print("ACK recibido ", message["header"].sequence, " Nuevo sequence: ", self.sequence)
+				# TODO VERR
+				for i in range(self.sequence, message["header"].sequence +1):
+					if i in self.fragments:
+						print("Borrando fragmento ", i)
+						del self.fragments[i]
+				
+			else:
+				sack = message["header"].get_sequences()[1]
+				for i in sack:
+					print("Borrando fragmento SACK", i, " sequence: ", self.sequence, " header " , message["header"].sequence)
+					self.sents -= 1
+					if i in self.fragments:
+						del self.fragments[i]
+
+			#logger.info(f"SACK enviado. Último ACK: {ack_seq - 1}, SACK: {bin(sack_bits)[2:].zfill(32)}")
+			#print(f"Unacked packets despues de procesar el SACK: {self.unacked_packets.keys()}")
 
 
 	def put_message(self, message):
@@ -168,10 +231,14 @@ def send_ack(socket: socket.socket, connection: Connection, sequence=None):
 	socket.sendto(package, connection.addr)
 
 
-def send_sack_ack(socket: socket.socket, connection: Connection, sequence=None):
+def send_sack_ack(socket: socket.socket, connection: Connection, sequence=None, sack_packages=[]):
 	seq = sequence if sequence else connection.sequence
 	header = UDPHeader(0, connection.sequence, 0)
 	header.set_flag(UDPFlags.ACK)
+	header.set_flag(UDPFlags.SACK)
+	header.set_sack(sack_packages)
+	if sack_packages:
+		print("Sack: ", format(header.sack, f'0{32}b'))
 	package = UDPPackage().pack(header, b"")
 	socket.sendto(package, connection.addr)
 
@@ -193,6 +260,7 @@ def send_end_confirmation(socket: socket.socket, connection: Connection):
 
 def send_start_confirmation(socket: socket.socket, connection: Connection):
 	header = UDPHeader(0, 0, 0)
+	#header.set_sack([11,15])
 	header.set_flag(UDPFlags.START)
 	header.set_flag(UDPFlags.ACK)
 	package = UDPPackage().pack(header, b"")

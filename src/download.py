@@ -2,10 +2,12 @@ import socket
 import sys
 import os
 import signal
+import traceback
+import time
 from lib.parser import parse_download_args
 from lib.logger import setup_logger
 from lib.utils import setup_signal_handling
-from lib.connection import Connection, CloseConnectionException, send_package, receive_package, close_connection, send_end, send_ack, confirm_endfile
+from lib.connection import Connection, CloseConnectionException, send_package, receive_package, close_connection, send_end, send_ack, confirm_endfile, send_sack_ack
 from lib.udp import UDPFlags, UDPHeader
 from lib.constants import MAX_RETRIES, TIMEOUT, FRAGMENT_SIZE
 
@@ -30,11 +32,16 @@ connection = Connection(
 )
 
 
-def connect_server():
+def connect_server(protocol):
 	header = UDPHeader(0, connection.sequence, 0)
 	header.set_flag(UDPFlags.START)
 	if DOWNLOAD:
 		header.set_flag(UDPFlags.DOWNLOAD)
+	if protocol == "stop_and_wait":
+		header.clear_flag(UDPFlags.PROTOCOL)
+	elif protocol == "sack":
+		header.set_flag(UDPFlags.PROTOCOL)
+		
 	try:
 		send_package(client_socket, connection, header, connection.path.encode())
 		addr, header, data = receive_package(client_socket)
@@ -45,13 +52,13 @@ def connect_server():
 			logger.info("Conexión establecida con el servidor.")
 			return True
 		else:
-			logger.error("Error: No se pudo establecer conexión con el servidor.")
+			logger.error("Error: No se pudo establecer conexión con el servidor. 1")
 			return False
 	except ConnectionResetError:
 		logger.error("Error: Conexión rechazada por el servidor.")
 		return False
 	except socket.timeout:
-		logger.error("Error: No se pudo establecer conexión con el servidor.")
+		logger.error("Error: No se pudo establecer conexión con el servidor. 2")
 		return False
 
 
@@ -65,9 +72,10 @@ def download_stop_and_wait():
 				if header.sequence not in connection.fragments:
 					connection.fragments[header.sequence] = data
 					connection.sequence = header.sequence
-					print(f"Fragmento {header.sequence} recibido del servidor.")
+					logger.info(f"Fragmento {header.sequence} recibido del servidor.")
 				else:
-					print(f"Fragmento {header.sequence} ya recibido.")
+					logger.warning(f"Fragmento {header.sequence} ya recibido.")
+					
 											
 				send_ack(client_socket, connection, sequence=header.sequence)
 				print("Se envio ACK ", header.sequence)
@@ -82,7 +90,7 @@ def download_stop_and_wait():
 			elif header.has_close():
 				connection.is_active = False
 				if len(data) > 0:
-					print(f"Cierre del servidor: [{data.decode()}]")
+					logger.info(f"Cierre del servidor: [{data.decode()}]")
 					raise ValueError(f"Archivo inexistente en Servidor")
 		except ConnectionResetError:
 			logger.error("Error: Conexion perdida")
@@ -94,8 +102,79 @@ def download_stop_and_wait():
 				return False
 
 
-def download_with_sack(dir, name):
-	pass
+def download_with_sack():
+	connection.is_active = True
+	expected_sequence = 0
+	received_out_of_order = []
+
+	#diccionario auxiliar para guardar cuantos retries tuvo cada paquete
+	retries_per_packet = {}
+
+	while connection.is_active:
+		try:
+			addr, header, data = receive_package(client_socket)
+			
+			if header.has_data():
+				#print("OutOrder: ", received_out_of_order)
+				if header.sequence not in connection.fragments:
+					connection.fragments[header.sequence] = data
+					logger.info(f"Fragmento {header.sequence} recibido del servidor.")
+
+				if header.sequence == connection.sequence +1:
+					connection.sequence = header.sequence
+					received_out_of_order.sort()
+					for i in received_out_of_order:
+						if i == connection.sequence +1:
+							send_sack_ack(client_socket, connection, connection.sequence)
+							connection.sequence = i
+							received_out_of_order.remove(i)		
+						else:
+							break
+
+				elif header.sequence > connection.sequence +1:
+					logger.warning(f"Fragmento {header.sequence} recibido fuera de orden.")
+					if header.sequence not in received_out_of_order:
+						received_out_of_order.append(header.sequence)
+
+				
+				# Preparar y enviar SACK al servidor
+				send_sack_ack(client_socket, connection, connection.sequence, received_out_of_order)
+				#logger.info(f"SACK enviado. Último ACK: { connection.sequence}, SACK: {format(header.sack, '032b')}")
+				time.sleep(0.05)
+				
+
+			elif header.has_end():
+				connection.is_active = False
+				connection.save_file()
+				# TODO: El cliente deberia avisar que hay que matar la conexion
+				# send_end_confirmation(client_socket, connection)
+				logger.info("Archivo recibido completamente.")
+			
+			elif header.has_close():
+				connection.is_active = False
+				if data:
+					logger.warning(f"Cierre del servidor: [{data.decode()}]")
+					raise ValueError("Archivo inexistente en Servidor")
+
+		except socket.timeout:
+			# Manejo de tiempo de espera: reenviar el último SACK
+			print("Timeout")
+			# Actualizo el diccionario de retries, si no tuve ninguno le cargo 1, si ya tuve le sumo 1.
+			if expected_sequence in retries_per_packet:
+				retries_per_packet[expected_sequence] +=1
+			else: retries_per_packet[expected_sequence] = 1
+
+			# Si tuve el maximo numero de retries para un paquete, mato la conexion
+			if retries_per_packet[expected_sequence] >= MAX_RETRIES:
+				logger.error("Numero maximo de reintentos alcanzado. Cerrando conexion.")
+				return False
+
+
+			send_sack_ack(client_socket, connection, connection.sequence, received_out_of_order)
+			logger.info(f"SACK enviado. Último ACK: { connection.sequence}, SACK: {bin(header.sack)[2:].zfill(32)}")
+
+	return True
+
 
 
 
@@ -122,12 +201,14 @@ def handle_download(protocol):
 if __name__ == "__main__":
 	setup_signal_handling()
 	try:
-		if connect_server():
+		if connect_server(args.protocol):
 			connection.path = f"{args.dst}/{args.name}"
 			handle_download(args.protocol)
 	except ValueError as e:
 		logger.error(e)
+		logger.error(traceback.format_exc())
 	except Exception as e:
 		logger.error(f"Error en main: {e}")
+		logger.error(traceback.format_exc())
 	finally:
 		client_socket.close()

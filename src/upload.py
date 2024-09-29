@@ -13,7 +13,7 @@ from lib.connection import (
 	confirm_endfile,
 )
 from lib.udp import UDPFlags, UDPHeader
-from lib.constants import TIMEOUT, FRAGMENT_SIZE, WINDOW_SIZE
+from lib.constants import TIMEOUT, FRAGMENT_SIZE, SACK_WINDOW_SIZE
 
 from collections import deque
 
@@ -138,7 +138,7 @@ def upload_with_sack(dir, name):
 
 		window = deque()
 		
-		while len(window) < WINDOW_SIZE: # Envio la cantidad que la windowSize me pe
+		while len(window) < SACK_WINDOW_SIZE: # Envio la cantidad que la windowSize me pe
 			packet_to_send = unacked_packets[connection.sequence]
 			send_data(
 					client_socket,

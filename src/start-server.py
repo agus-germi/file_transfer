@@ -24,13 +24,17 @@ def check_connection(
         addr,
         f"{storage_dir}/{data.decode()}",
         download=header.has_download(),
+        protocol="sack" if header.has_protocol() else "stop_and_wait"
     )
 
     logger.info(
         f"Path: {data.decode()} | Upload: {connection.upload} | Download: {connection.download}"
     )
     if header.has_start() and header.sequence == 0 and data.decode() != "":
-        logger.info(f"Mensaje Recibido: {addr} [Start]")
+        if header.has_protocol():
+            logger.info(f"Mensaje Recibido: {addr} [Start] con protocolo SACK")
+        else:
+            logger.info(f"Mensaje Recibido: {addr} [Start] con protocolo Stop and Wait")
         send_start_confirmation(server_socket, connection)
         connections[addr] = connection
     else:
@@ -91,10 +95,10 @@ def start_server():
     args = parse_server_args()
     logger = setup_logger(verbose=args.verbose, quiet=args.quiet)
 
-    # Crear un socket UDP
+    # Create a UDP socket
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     server_address = (args.host, args.port)
-    logger.info(f"Servidor escuchando en {server_address}")
+    logger.info(f"Server listening on {server_address}")
     server_socket.bind(server_address)
 
     try:
@@ -102,7 +106,7 @@ def start_server():
             handle_connection(server_socket, args.storage, logger)
     except KeyboardInterrupt:
         server_socket.close()
-        logger.info("\nInterrupción detectada. El programa ha sido detenido.")
+        logger.info("\nInterruption detected. The program has been stopped.")
 
 
 if __name__ == "__main__":
