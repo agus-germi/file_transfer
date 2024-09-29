@@ -153,14 +153,14 @@ def handle_ack_sack(header: UDPHeader):
 
 
 def upload_with_sack_mati(dir, name):
-	try: 
-		connection.sequence = 1  # Inicia el número de secuencia en 1
-		connection.path = f"{dir}/{name}"
-		connection.get_fragments()
-		connection.is_active = True
+	connection.sequence = 1  # Inicia el número de secuencia en 1
+	connection.path = f"{dir}/{name}"
+	connection.get_fragments()
+	connection.is_active = True
 
-		send_sack_data()
-		while connection.is_active:
+	send_sack_data()
+	while connection.is_active:
+		try:		
 			addr, header, data = receive_package(client_socket)
 			handle_ack_sack(header)
 			while is_data_available(client_socket):
@@ -169,12 +169,12 @@ def upload_with_sack_mati(dir, name):
 				handle_ack_sack(header)
 
 			send_sack_data()
-		
 
-	except TimeoutError:
-		logger.error("TIMEOUT")
-	except:
-		logger.error("Traceback info:\n" + traceback.format_exc())
+		except TimeoutError:
+			logger.error("TIMEOUT")
+			send_sack_data()
+		except Exception as e:
+			logger.error("Traceback info:\n" + traceback.format_exc())
 
 
 def handle_upload(dir, name, protocol):
