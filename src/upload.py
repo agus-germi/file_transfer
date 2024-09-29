@@ -76,6 +76,7 @@ def upload_stop_and_wait(dir, name):
 
 	while connection.fragments and connection.is_active:
 		key = next(iter(connection.fragments))
+		connection.sequence = key
 		data = connection.fragments[key]
 		send_data(client_socket, connection, data, sequence=connection.sequence)
 		logger.info(f"Fragmento {connection.sequence} enviado al servidor.")
@@ -86,7 +87,6 @@ def upload_stop_and_wait(dir, name):
 				logger.info(f"ACK {connection.sequence} recibido del servidor.")
 				if header.sequence in connection.fragments:
 					connection.fragments.pop(header.sequence)
-				connection.sequence += 1
 			else:
 				logger.error(
 					f"Received ACK {header.sequence} is not {connection.sequence} "
