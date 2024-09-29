@@ -12,7 +12,7 @@ from lib.connection import (
 	confirm_endfile,
 )
 from lib.udp import UDPFlags, UDPHeader
-from lib.constants import TIMEOUT, FRAGMENT_SIZE, WINDOW_SIZE
+from lib.constants import TIMEOUT, FRAGMENT_SIZE, SACK_WINDOW_SIZE
 
 
 UPLOAD = True

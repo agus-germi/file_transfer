@@ -78,7 +78,7 @@ def download_stop_and_wait():
 					
 											
 				send_ack(client_socket, connection, sequence=header.sequence)
-				logger.info("Se envio ACK ", header.sequence)
+				print("Se envio ACK ", header.sequence)
 
 			# Se recibio por completo el archivo
 			elif header.has_end():
