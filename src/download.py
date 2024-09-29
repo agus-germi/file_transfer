@@ -122,11 +122,12 @@ def download_with_sack():
 					connection.sequence = header.sequence
 					connection.received_out_of_order.sort()
 					send_sack_ack(client_socket, connection, connection.sequence)
-					for i in connection.received_out_of_order:
+					received_out_of_order = connection.received_out_of_order
+					for i in received_out_of_order:
 						if i == connection.sequence +1:
 							connection.sequence = i
-							send_sack_ack(client_socket, connection, connection.sequence)							
-							connection.received_out_of_order.remove(i)		
+							send_sack_ack(client_socket, connection, connection.sequence)
+							connection.received_out_of_order.remove(i)	
 						else:
 							break
 
