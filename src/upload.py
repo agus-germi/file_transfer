@@ -38,7 +38,7 @@ connection = Connection(
 
 
 def connect_server(protocol):
-	header = UDPHeader(0, connection.sequence, 0)
+	header = UDPHeader(connection.sequence)
 	header.set_flag(UDPFlags.START)
 	if DOWNLOAD:
 		header.set_flag(UDPFlags.DOWNLOAD)
