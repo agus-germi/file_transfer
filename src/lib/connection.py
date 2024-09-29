@@ -196,7 +196,7 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 
 			send_data(self.socket, self, data, sequence=key)
 			self.window_sents += 1
-			print("Enviando paquete ", key)
+			print("Enviando paquete ", key, " - Secuencia: ", self.sequence)
 		
 		if not self.fragments:
 			send_end(self.socket, self)
