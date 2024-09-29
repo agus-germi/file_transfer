@@ -12,6 +12,7 @@ class MyTopo(Topo):
     def __init__(self, nhosts, arg_loss):
 
         self.nhosts = nhosts
+        self.arg_loss = arg_loss
         Topo.__init__(self)
 
     def build(self):
@@ -20,7 +21,7 @@ class MyTopo(Topo):
             self.addHost('JuanLopez')
             self.addHost('Hamelin')
             self.addLink('JuanLopez', s1)
-            self.addLink('Hamelin', s1, arg_loss=10)
+            self.addLink('Hamelin', s1, loss= self.arg_loss)
             return
         else:
             server = self.addHost('aserver')

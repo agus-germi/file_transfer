@@ -3,14 +3,17 @@ import socket
 import threading
 import queue
 import os
+import traceback
 
-from lib.constants import TIMEOUT, FRAGMENT_SIZE, PACKAGE_SIZE, MAX_RETRIES
+from lib.constants import TIMEOUT, FRAGMENT_SIZE, PACKAGE_SIZE, MAX_RETRIES, WINDOW_SIZE
 from lib.udp import UDPHeader, UDPFlags, UDPPackage
 from lib.logger import setup_logger
 
 logger = setup_logger(verbose=False, quiet=False)
 
-
+#0-10  [010]
+#(10   [111])
+# 10   [100]
 
 class BaseConnection:
 	"""Clase base que contiene atributos y comportamientos comunes de conexiones."""
@@ -24,6 +27,10 @@ class BaseConnection:
 		self.upload = not download
 		self.fragments = {}
 		self.retrys = 0
+		
+		#sack implementation
+		self.buffer = set() #Ventana donde bufferear los sack
+		self.last_acumulated_secuence = -1
 
 
 	def __repr__(self):
@@ -76,8 +83,15 @@ class ClientConnection(BaseConnection, threading.Thread):
 				message = self.message_queue.get(timeout=2)
 
 				if self.upload:
-					if message["header"].has_data():
-						self.receive_data(message)
+					header = message["header"] 
+					if header.has_data():
+						if header.has_sack():
+							#recibo de datos sack
+							self.receive_data_sack(message)
+						else:
+							#recibo de datos s a w
+							self.receive_data_stop_wait(message)
+
 					elif message["header"].has_end():
 						send_end_confirmation(self.socket, self)
 						self.save_file()
@@ -96,6 +110,7 @@ class ClientConnection(BaseConnection, threading.Thread):
 				self.ttl += 1
 			except Exception as e:
 				logger.error(f"Error con {self.addr}: {e}")
+				logger.error("Traceback info:\n" + traceback.format_exc())
 				self.is_active = False
 
 
@@ -104,7 +119,7 @@ class ClientConnection(BaseConnection, threading.Thread):
 		self.message_queue.put(message)
 
 
-	def receive_data(self, message):
+	def receive_data_stop_wait(self, message):
 		if message["header"].sequence in self.fragments:
 			send_ack(self.socket, self, message["header"].sequence)
 			return
@@ -113,6 +128,40 @@ class ClientConnection(BaseConnection, threading.Thread):
 		logger.info(f"Recibido desde {self}: [{self.sequence}]")
 		self.fragments[self.sequence] = message["data"]
 		send_ack(self.socket, self)
+
+
+	def receive_data_sack(self, message):
+		msg_secuence = message["header"].sequence
+		logger.info(f"Recibido desde {self}: [{msg_secuence}]")
+		
+		if msg_secuence not in self.fragments:
+			self.fragments[msg_secuence] = message["data"]
+		
+		primer_paquete_faltante = self.last_acumulated_secuence + 1
+		if msg_secuence == primer_paquete_faltante:
+			#borr0 toda la tanda de paquetes que ya estan en el buffer
+			self.last_acumulated_secuence = msg_secuence
+			index_buff_secuence = self.last_acumulated_secuence + 1
+			while index_buff_secuence in self.buffer:
+				self.last_acumulated_secuence = index_buff_secuence 
+				self.buffer.discard(index_buff_secuence)
+				index_buff_secuence += 1
+				if len(self.buffer) > WINDOW_SIZE:
+					raise Exception("Buffer lleno")
+				
+		elif msg_secuence > primer_paquete_faltante:
+			logger.warning(f"Fragmento {msg_secuence} recibido fuera de orden.")
+			self.buffer.add(msg_secuence) 
+
+		buffer_to_list = list(self.buffer)
+		sack_list = convert_to_sack(self.last_acumulated_secuence, buffer_to_list) #TODO si pasa test, no lo mandamos ordenado
+		logger.info(f"sack list {format(sack_list, '032b')}, buffer {buffer_to_list}")
+		
+		logger.info(f"Le digo que tengo hasta {self.last_acumulated_secuence} y ademas {buffer_to_list}")
+		msg_secuence = self.last_acumulated_secuence
+		send_ack_sack(self.socket, self, msg_secuence, sack_list)
+
+
 
 
 	def send_data(self, message=None):
@@ -151,11 +200,12 @@ def send_package(socket: socket.socket, connection: Connection, header, data):
 
 
 def send_data(
-	socket: socket.socket, connection: Connection, data: bytes, sequence=None
+	socket: socket.socket, connection: Connection, data: bytes, sequence=None, is_sack=False
 ):
 	seq = sequence if sequence else connection.sequence
 	header = UDPHeader(0, seq, 0)
 	header.set_flag(UDPFlags.DATA)
+	if is_sack: header.set_flag(UDPFlags.SACK)
 	package = UDPPackage().pack(header, data)
 	socket.sendto(package, connection.addr)
 
@@ -168,10 +218,20 @@ def send_ack(socket: socket.socket, connection: Connection, sequence=None):
 	socket.sendto(package, connection.addr)
 
 
-def send_sack_ack(socket: socket.socket, connection: Connection, sequence=None):
+def send_ack_sack(socket: socket.socket, connection: Connection, sequence, sack):
+	
+	# header = UDPHeader(0, connection.sequence, 0)
+	# header.set_flag(UDPFlags.ACK)
+	# #header.set_flag(UDPFlags.SACK)
+
+	# package = UDPPackage().pack(header, b"")
+	# socket.sendto(package, connection.addr)
 	seq = sequence if sequence else connection.sequence
-	header = UDPHeader(0, connection.sequence, 0)
+	header = UDPHeader(0, seq, 0)
 	header.set_flag(UDPFlags.ACK)
+	header.set_flag(UDPFlags.SACK)
+	
+	header.sack = sack
 	package = UDPPackage().pack(header, b"")
 	socket.sendto(package, connection.addr)
 
@@ -235,3 +295,14 @@ def confirm_endfile(socket, connection):
 			logger.warning(
 				"Tiempo de espera agotado al confirmar el final del archivo."
 			)
+
+def convert_to_sack(last_complete_seq, packet_sequences):
+	sack_mask = 0  
+	for packet_sequence in packet_sequences:
+		if packet_sequence == 0:
+			continue  
+
+		sequence = packet_sequence - last_complete_seq
+		if 1 <= sequence < 32:  
+			sack_mask |= 1 << (31 - sequence)  
+	return sack_mask

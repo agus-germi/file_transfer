@@ -136,65 +136,146 @@ def upload_with_sack(dir, name):
 		file_dir = f"{dir}/{name}"
 		unacked_packets, sec_num_last_packet = get_fragments_sack(file_dir)  # Diccionario para almacenar los paquetes no reconocidos <- TOTAL DE PAQUETES
 
-		window = deque()
-		
-		while len(window) < WINDOW_SIZE: # Envio la cantidad que la windowSize me pe
+
+		window = deque()		
+		while len(window) < WINDOW_SIZE: # Envio la cantidad que la windowSize me permite
 			packet_to_send = unacked_packets[connection.sequence]
 			send_data(
 					client_socket,
 					connection,
 					packet_to_send,
 					sequence=connection.sequence,
+					is_sack=True
 				)
 			window.append(connection.sequence)
-			connection.sequence += 1	
-
+			connection.sequence += 1
+		
+		ack_counter = 0
+		oldest_unacked = 0
 		while unacked_packets: # Mientras tengamos paquetes sin ACK (no enviados correctamente)
-			client_socket.settimeout(TIMEOUT)
+			
 			try:
-				_, header, _ = receive_package(client_socket)
-				last_complete_secuence, sack = header.get_sequences()
-				#borrar los sack correspondientes
-				
-				#borrar todo lo previo a last_complete 
-				# index_from = 0 if last_complete_secuence < WINDOW_SIZE else last_complete_secuence - WINDOW_SIZE #esto puede ser *2
-				# for i in range(index_from, last_complete_secuence):
-				# 	unacked_packets.remove(i)
-				
+				client_socket.settimeout(TIMEOUT)
+				_, ack_header, _ = receive_package(client_socket)
+				if not ack_header.has_ack():
+					continue
 
+				acumulated_ack, sack = ack_header.get_sequences()
+				logger.info(f"Me comenta que tiene bien hasta el: [{acumulated_ack} y ademas {sack}]")
 				
-				#Borrar aquellos que recibi fuera de orden
-				# for selected_ack in sack:
-				# 	unacked_packets.remove(selected_ack)
-				
-				## aca recibe el paquete y tenemos que ver como hacer para enviar el siguiente moviendo la ventana acorde
-				elemento_recibido = window.popleft()
-				logger.info(f"elemento_recibido = {elemento_recibido}")
-				logger.info(f"last_complete_secuence = {last_complete_secuence}")
-				logger.info(f"WINDOW state after popping {elemento_recibido}= {window}")
+				if acumulated_ack in unacked_packets:
+					del unacked_packets[acumulated_ack] #borro el paquete de los no reconocidos
 
-				#borramos del buffer el elemento con ack
-				del unacked_packets[elemento_recibido]
+				if acumulated_ack == oldest_unacked:
+					#recibi un ack del archivo mas viejo en la ventana
+					#TODO: analizo sack para ver si hay paquetes recibidos
+					for ack in sack:
+						if ack in window:
+							window.remove(ack) 
+					
+					#lo saco de la ventana y mando el siquiente
+					window.popleft() #saco el elemento ACKed de la ventana
+					oldest_unacked += 1
+					ack_counter = 0
+
+					#en este momento connection.sequence es el siguiente paquete a enviar
+					if connection.sequence <= sec_num_last_packet: #si quedan paquetes por enviar
+						window.append(connection.sequence)  #agrego a la ventana un nuevo elemento enviado
+						logger.info(f"1 Enviando paquete {connection.sequence}")
+						send_data(
+							client_socket,
+							connection,
+							unacked_packets[connection.sequence],
+							sequence=connection.sequence,
+							is_sack=True
+						)
+						#incremento el sequence para el proximo envio
+						connection.sequence += 1
+					else:
+						logger.info(f"No quedan elementos por enviar, esperando los ack restantes, last packet: {sec_num_last_packet}")
 				
-				
-				if connection.sequence < sec_num_last_packet:
-					#quedan elementos, mando el siguiente
-					connection.sequence += 1
-					window.append(connection.sequence)
-					elemento_a_enviar = unacked_packets[connection.sequence]
-					send_data(
-						client_socket,
-						connection,
-						elemento_a_enviar,
-						sequence=connection.sequence,
-					)
+				elif acumulated_ack < oldest_unacked:
+					#hubo perdida de paquetes tengo que reenviar pero chequeando sack
+					
+					#analizo sack para ver si hay algunos paquetes recibidos
+					for ack in sack:
+						if ack in window:
+							window.remove(ack) 
+					
+					ack_counter += 1
+					# si tengo espacio en la ventana y el ack_counter no esta en el limite, envio el siguiente paquete normalmente	
+					if len(window) < WINDOW_SIZE and ack_counter < 3:
+						if connection.sequence <= sec_num_last_packet: #si quedan paquetes por enviar
+							window.append(connection.sequence)
+							logger.info(f"2 Enviando paquete {connection.sequence}")
+							send_data(
+								client_socket,
+								connection,
+								unacked_packets[connection.sequence],
+								sequence=connection.sequence,
+								is_sack=True
+							)
+							connection.sequence += 1
+						else:
+							logger.info(f"No quedan elementos por enviar, esperando los ack restantes, last packet: {sec_num_last_packet}")
+					else:
+						#reenvio el paquete mas viejo
+						logger.info(f"3 Enviando paquete {oldest_unacked}")
+						send_data(
+							client_socket,
+							connection,
+							unacked_packets[oldest_unacked],
+							sequence=oldest_unacked,
+							is_sack=True
+						)
+				elif acumulated_ack > oldest_unacked:
+					#ahora mi oldest es el acumulated_ack y borro todo entre oldest y acumulated_ack
+					logger.info(f"ACK recibido ({acumulated_ack}) es mayor al oldest: {oldest_unacked}, ")
+					
+					for i in range(oldest_unacked, acumulated_ack):
+						if i in unacked_packets:
+							del unacked_packets[i]
+					while window[0] < oldest_unacked:
+						window.popleft()
+					oldest_unacked = acumulated_ack + 1
+					ack_counter = 0
+
+					#envio un nuevo paquete
+					#en este momento connection.sequence es el siguiente paquete a enviar
+					if connection.sequence <= sec_num_last_packet: #si quedan paquetes por enviar
+						window.append(connection.sequence)  #agrego a la ventana un nuevo elemento enviado
+						logger.info(f"4 Enviando paquete {connection.sequence}")
+						send_data(
+							client_socket,
+							connection,
+							unacked_packets[connection.sequence],
+							sequence=connection.sequence,
+							is_sack=True
+						)
+						#incremento el sequence para el proximo envio
+						connection.sequence += 1
+
+
+
+				elif len(window) == 0: #si la ventana esta vacia termina el programa
+					return
 				else:
-					if len(window) == 0:
-						return
-					logger.info("No quedan elementos, esperando los ack restantes")
+					logger.info(f"ACK recibido ({acumulated_ack}) no corresponde al archivo mas viejo en la ventana: {window.popleft()}")
+					#raise Exception("todo")
 
 			except TimeoutError:
 				logger.error("TIMEOUT")
+				logger.info(f"5 Enviando paquete {oldest_unacked}")
+				if oldest_unacked in unacked_packets:
+					send_data(
+						client_socket,
+						connection,
+						unacked_packets[oldest_unacked],
+						sequence=oldest_unacked,
+						is_sack=True
+					)
+				else: 
+					logger.info(f"El paquete {oldest_unacked} ya fue enviado")
 				
 	except:
 		logger.error("Traceback info:\n" + traceback.format_exc())

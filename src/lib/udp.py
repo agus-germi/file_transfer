@@ -30,41 +30,15 @@ class UDPHeader:
 			self.HEADER_FORMAT, self.flags, self.sequence, self.sack
 		)
 	
-	def get_sequences(self)-> tuple:
-		try:
-			""" Devuelve el primer elemento el num_sequence en el que esta y en el 2 elemento resto de los packetes recividos """
-			one_bits = []
-			sequences = []
+	def get_sequences(self):
+		sequences = []
 
-			bits_total = 32
-			for i in range(bits_total - 1, -1, -1):
-				if (self.sack >> i) & 1:
-					one_bits.append(bits_total - i)
-					sequences.append(bits_total -i + self.sequence)
-		
-			# Borrar todos los paquetes con numero de sequencia < al primer elemento y los elementos del segundo elemento
-			# Puede estar el caso border que si la diferencia entre lo que no recibio y el paquete que estoy mandando es mayor a 20. Me enfoco en mandar lo que no se recibio
-			return (self.sequence, sequences)
-		
-		except Exception as e:
-			logger.error(f"Error al obtener la secuencia: {e}")
-	
-	
-	def set_sack(self, package_secuence):
-		if package_secuence == 0:
-			return 0
-		
-		sequence = package_secuence - self.sequence
-		bit_number = 0
-		if 0 < sequence < 32:
-			bit_number = 1 << sequence
-			
-		
-		print(f"Número con solo el bit {sequence} en 1: {bit_number} (en binario: {format(bit_number, '032b')})")
-		return bit_number
-	
-	
-
+		bits_total = 32
+		for i in range(bits_total - 1, -1, -1):
+			if (self.sack >> i) & 1:  
+				sequence_number = self.sequence + (bits_total - i)
+				sequences.append(sequence_number-1)
+		return (self.sequence, sequences)
 
 	@classmethod
 	def unpack(cls, binary_header):
@@ -103,8 +77,9 @@ class UDPHeader:
 		"""Check if the download flag is set. If not set, it is an upload."""
 		return self.has_flag(UDPFlags.DOWNLOAD)
 
-	def has_protocol(self):
-		return self.has_flag(UDPFlags.PROTOCOL)
+	def has_sack(self):
+		"""0 =stop and wait ^ 1 = sack"""
+		return self.has_flag(UDPFlags.SACK)
 
 
 class UDPPackage:
@@ -130,12 +105,16 @@ class UDPPackage:
 
 
 class UDPFlags:
-	START = 0b00000001
-	DATA = 0b00000010
-	ACK = 0b00000100
-	SACK = 0b00100000  # TODO: VER !
-	END = 0b00001000
-	CLOSE = 0b00010000
-	PROTOCOL = 0b10000000
+	START =    0b00000001
+	DATA =     0b00000010
+	ACK =      0b00000100
+	END =      0b00001000
+	CLOSE =    0b00010000
 	DOWNLOAD = 0b01000000
+	SACK =     0b10000000
+
+
+
+
+
 
