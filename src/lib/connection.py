@@ -239,6 +239,7 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 				print("ACK recibido ", message["header"].sequence, " Nuevo sequence: ", self.sequence)
 
 				for i in range(seq, message["header"].sequence +1):
+					self.sequence = i
 					if i in self.fragments:
 						print("Borrando fragmento ", i)
 						del self.fragments[i]
