@@ -9,7 +9,7 @@ from lib.logger import setup_logger
 from lib.utils import setup_signal_handling
 from lib.connection import Connection, CloseConnectionException, send_package, receive_package, close_connection, send_end, send_ack, send_end_confirmation, send_sack_ack, confirm_send
 from lib.udp import UDPFlags, UDPHeader
-from lib.constants import MAX_RETRIES, TIMEOUT, FRAGMENT_SIZE
+from lib.constants import MAX_RETRIES, TIMEOUT, TIMEOUT_SACK, FRAGMENT_SIZE
 
 
 UPLOAD = False
@@ -102,6 +102,7 @@ def download_stop_and_wait():
 
 
 def download_with_sack():
+	client_socket.settimeout(TIMEOUT_SACK)
 	connection.is_active = True
 	expected_sequence = 0
 
