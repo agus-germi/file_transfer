@@ -7,6 +7,7 @@ import os
 from lib.constants import TIMEOUT, FRAGMENT_SIZE, PACKAGE_SIZE
 from lib.logger import setup_logger
 
+# Asumimos que siempre es necesario mostrar estos logs
 logger = setup_logger(verbose=True, quiet=False)
 
 

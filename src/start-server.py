@@ -1,5 +1,4 @@
 import socket
-from lib.utils import setup_signal_handling
 from lib.logger import setup_logger
 from lib.parser import parse_server_args
 from lib.connection import (
@@ -14,7 +13,6 @@ from lib.connection import (
 )
 from lib.udp import UDPFlags, UDPHeader
 import signal
-from typing import List
 import sys
 import os
 
@@ -33,7 +31,6 @@ server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, recv_buffer_size)
 server_socket.bind(server_address)
 
 
-
 def check_connection(
     server_socket, addr, header: UDPHeader, data: bytes, storage_dir: str, logger
 ):
@@ -44,7 +41,7 @@ def check_connection(
             addr,
             f"{storage_dir}/{data.decode()}",
             download=header.has_download(),
-            protocol="sack"
+            protocol="sack",
         )
     else:
         connection = ClientConnection(
@@ -52,9 +49,8 @@ def check_connection(
             addr,
             f"{storage_dir}/{data.decode()}",
             download=header.has_download(),
-            protocol="stop_and_wait"
+            protocol="stop_and_wait",
         )
-        
 
     logger.info(
         f"Path: {data.decode()} | Upload: {connection.upload} | Download: {connection.download}"
@@ -95,8 +91,8 @@ def handle_connection(server_socket, storage_dir, logger):
                 connection.is_active = True
                 if not connection.is_alive():
                     connection.start()
-            
-		# Confirmacion de recepcion de paquete de fin (download)
+
+        # Confirmacion de recepcion de paquete de fin (download)
         elif header.has_flag(UDPFlags.END) and header.has_flag(UDPFlags.ACK):
             connection.is_active = False
             if connection.is_alive():
@@ -119,7 +115,7 @@ def handle_connection(server_socket, storage_dir, logger):
             # Si se pierde el paquete este -> El server por ttl sabe que tiene que cerrar esta conexion
             logger.info(f"Cliente Desconectado: {addr}")
         else:
-            #logger.info(f"Mensaje Recibido: {addr}")
+            # logger.info(f"Mensaje Recibido: {addr}")
             message = {"addr": addr, "header": header, "data": data}
             connection.put_message(message)
 
@@ -142,7 +138,7 @@ def limpiar_recursos(signum, frame):
         connection.is_active = False
         if connection.is_alive():
             connection.join()
-        close_connection(server_socket,connection)
+        close_connection(server_socket, connection)
     server_socket.close()
     sys.exit(0)  # Salgo del programa con código 0 (éxito)
 
@@ -153,7 +149,6 @@ def setup_signal_handling():
     if os.name != "nt":
         signal.signal(signal.SIGQUIT, limpiar_recursos)
         signal.signal(signal.SIGHUP, limpiar_recursos)
-
 
 
 if __name__ == "__main__":
