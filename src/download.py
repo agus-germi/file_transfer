@@ -81,7 +81,7 @@ def download_stop_and_wait():
 					
 											
 				send_ack(client_socket, connection, sequence=header.sequence)
-				print("Se envio ACK ", header.sequence)
+				logger.info("Se envio ACK ", header.sequence)
 
 			# Se recibio por completo el archivo
 			elif header.has_end():
@@ -100,7 +100,6 @@ def download_stop_and_wait():
 			send_ack(client_socket, connection, sequence=connection.sequence)
 			logger.warning(f"Reenviando ACK {connection.sequence}")
 			if connection.retrys > MAX_RETRIES:
-				# TODO Nunca se sube el retries
 				connection.is_active = False
 				return False
 			connection.retrys += 1
@@ -115,7 +114,6 @@ def download_with_sack():
 			addr, header, data = receive_package(client_socket)
 			
 			if header.has_data():
-				#print("OutOrder: ", received_out_of_order)
 				connection.retrys = 0
 				if header.sequence not in connection.fragments:
 					connection.fragments[header.sequence] = data
@@ -127,7 +125,7 @@ def download_with_sack():
 					connection.received_out_of_order.sort()
 					received_out_of_order = list(connection.received_out_of_order)
 					for i in received_out_of_order:
-						print("recibidos: ",received_out_of_order, " i: ", i)
+						logger.info("Recibidos: ",received_out_of_order, " i: ", i)
 						if i == connection.sequence +1:
 							connection.sequence = i
 							send_sack_ack(client_socket, connection, connection.sequence)
@@ -159,7 +157,6 @@ def download_with_sack():
 		except socket.timeout:
 			# Manejo de tiempo de espera: reenviar el último SACK
 			send_sack_ack(client_socket, connection, connection.sequence, connection.received_out_of_order)
-			print("Timeout")
 			if connection.retrys > MAX_RETRIES:
 				# TODO Nunca se sube el retries
 				connection.is_active = False
@@ -192,7 +189,7 @@ def handle_download(protocol):
 
 
 def limpiar_recursos(signum, frame):
-	print(f"Recibiendo señal {signum}, limpiando recursos...")
+	logger.info(f"Recibiendo señal {signum}, limpiando recursos...")
 	close_connection(client_socket, connection)
 	sys.exit(0)  # Salgo del programa con código 0 (éxito)
 

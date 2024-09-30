@@ -114,11 +114,11 @@ def upload_stop_and_wait(dir, name):
 def send_sack_data():
 	for seq, (key, data) in enumerate(connection.fragments.items()):
 		if seq >= SACK_WINDOW_SIZE or connection.window_sents > SEND_WINDOW_SIZE:  # Solo mandamos los primeros 8 elementos
-			if connection.window_sents > SEND_WINDOW_SIZE:
-				print("ASADASfasfadsdfasfg")
+			#if connection.window_sents > SEND_WINDOW_SIZE:
+			#	print("ASADASfasfadsdfasfg")
 			break
 		if key > connection.sequence + MAX_SAC_DIF:
-			print("Se me lleno la cola")
+			# Se lleno la cola
 			break
 
 		# Print saber que segmentos quedan cuando quedan pocos
@@ -127,7 +127,7 @@ def send_sack_data():
 
 		send_data(client_socket, connection, data, sequence=key)
 		connection.window_sents += 1
-		print("Enviando paquete ", key, " quedan : ", len(connection.fragments))
+		logger.info("Enviando paquete ", key, " quedan : ", len(connection.fragments))
 	
 	# Se enviaron por completo el archivo
 	if not connection.fragments:
@@ -142,18 +142,18 @@ def handle_ack_sack(header: UDPHeader):
 			
 			seq = connection.sequence
 			connection.sequence = header.sequence
-			print("ACK recibido ", header.sequence, " Nuevo sequence: ", connection.sequence)
+			logger.info("ACK recibido ", header.sequence, " Nuevo sequence: ", connection.sequence)
 
 			for i in range(seq, header.sequence +1):
 				if i in connection.fragments:
-					print("Borrando fragmento ", i)
+					logger.info("Borrando fragmento ", i)
 					del connection.fragments[i]
 			
 		else:
 			sack = header.get_sequences()[1]
 			for i in sack:
 				if i in connection.fragments:
-					print("Borrando fragmento SACK", i, " sequence: ", connection.sequence, " header " , header.sequence)
+					logger.info("Borrando fragmento SACK", i, " sequence: ", connection.sequence, " header " , header.sequence)
 					#connection.window_sents -= 1
 					del connection.fragments[i]
 	if header.has_close():
@@ -172,10 +172,8 @@ def upload_with_sack(dir, name):
 		try:		
 			addr, header, data = receive_package(client_socket)
 			handle_ack_sack(header)
-			print("AAheader sequence: ", header.sequence)
 			while is_data_available(client_socket):
 				addr, header, data = receive_package(client_socket)
-				print("header sequence: ", header.sequence)
 				handle_ack_sack(header)
 
 			send_sack_data()
@@ -185,7 +183,7 @@ def upload_with_sack(dir, name):
 		except TimeoutError:
 			logger.error("TIMEOUT")
 			connection.window_sents -= SACK_WINDOW_SIZE/2
-			print("quedan fragmentos: ", len(connection.fragments))
+			logger.info("Quedan fragmentos: ", len(connection.fragments))
 			time.sleep(PACKAGE_SEND_DELAY*2)
 			send_sack_data()
 		except Exception as e:
@@ -213,7 +211,7 @@ def handle_upload(dir, name, protocol):
 
 
 def limpiar_recursos(signum, frame):
-	print(f"Recibiendo señal {signum}, limpiando recursos...")
+	logger.info(f"Recibiendo señal {signum}, limpiando recursos...")
 	close_connection(client_socket, connection)
 	sys.exit(0)  # Salgo del programa con código 0 (éxito)
 

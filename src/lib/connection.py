@@ -10,7 +10,8 @@ from lib.constants import TIMEOUT, TIMEOUT_SACK, FRAGMENT_SIZE, PACKAGE_SIZE, MA
 from lib.udp import UDPHeader, UDPFlags, UDPPackage
 from lib.logger import setup_logger
 
-logger = setup_logger(verbose=False, quiet=False)
+# Asumimos que siempre es necesario mostrar estos logs
+logger = setup_logger(verbose=True, quiet=False) 
 
 
 
@@ -53,7 +54,7 @@ class BaseConnection:
 			with open(self.path, "rb") as f:
 				for i, fragment in enumerate(iter(lambda: f.read(FRAGMENT_SIZE), b"")):
 					self.fragments[i+1] = fragment
-			print("Fragments listos para enviar ", len(self.fragments))
+			logger.info("Fragments listos para enviar ", len(self.fragments))
 		except FileNotFoundError:
 			logger.error(f"Error: Archivo {self.path} no encontrado.")
 			self.is_active = False
@@ -204,12 +205,12 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 
 			# Print saber que segmentos quedan cuando quedan pocos
 			if len(self.fragments) < 10:
-				print("FRAG: ", self.fragments.keys())
+				logger.info("FRAG: ", self.fragments.keys())
 
 
 			send_data(self.socket, self, data, sequence=key)
 			self.window_sents += 1
-			print("Enviando paquete ", key, " - Secuencia: ", self.sequence)
+			logger.info("Enviando paquete ", key, " - Secuencia: ", self.sequence)
 		
 		if not self.fragments:
 			send_end(self.socket, self)
@@ -227,7 +228,7 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 			self.received_out_of_order.sort()
 			received_out_of_order = list(self.received_out_of_order)
 			for i in received_out_of_order:
-				print("Recibidos OutOrder: ", received_out_of_order, " i: ",i )
+				logger.info("Recibidos OutOrder: ", received_out_of_order, " i: ",i )
 				if i == self.sequence +1:					
 					self.sequence = i
 					#send_sack_ack(self.socket, self, self.sequence)
@@ -255,20 +256,20 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 				self.window_sents -= message["header"].sequence - self.sequence
 				seq = self.sequence
 				self.sequence = message["header"].sequence
-				print("ACK recibido ", message["header"].sequence, " Nuevo sequence: ", self.sequence)
+				logger.info("ACK recibido ", message["header"].sequence, " Nuevo sequence: ", self.sequence)
 
 				for i in range(seq, message["header"].sequence +1):
 					self.sequence = i
 					if i in self.fragments:
 						self.window_sents -= 1
-						print("Borrando fragmento ", i)
+						logger.info("Borrando fragmento ", i)
 						del self.fragments[i]
 				
 			else:
 				sack = message["header"].get_sequences()[1]
 				for i in sack:					
 					if i in self.fragments:
-						print("Borrando fragmento SACK", i, " sequence: ", self.sequence, " header " , message["header"].sequence)
+						logger.info("Borrando fragmento SACK", i, " sequence: ", self.sequence, " header " , message["header"].sequence)
 						self.window_sents -= 1
 						del self.fragments[i]
 

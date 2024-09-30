@@ -18,7 +18,6 @@ from lib.constants import TIMEOUT, FRAGMENT_SIZE, SACK_WINDOW_SIZE
 UPLOAD = True
 DOWNLOAD = False
 
-# TODO: poner todo esto en otro lado
 args = parse_upload_args()
 logger = setup_logger(verbose=args.verbose, quiet=args.quiet)
 
@@ -42,8 +41,8 @@ def connect_server():
 	try:
 		send_package(client_socket, connection, header, connection.path.encode())
 		addr, header, data = receive_package(client_socket)
-		print("Header: ", header.get_sequences())
-		print("Sack: ", format(header.sack, f'0{32}b'))
+		logger.info("Header: ", header.get_sequences())
+		logger.info("Sack: ", format(header.sack, f'0{32}b'))
 
 		if header.has_ack() and header.has_start() and header.sequence == 0:
 			header.set_flag(UDPFlags.ACK)

@@ -7,7 +7,7 @@ import os
 from lib.constants import TIMEOUT, FRAGMENT_SIZE, PACKAGE_SIZE
 from lib.logger import setup_logger
 
-logger = setup_logger(verbose=False, quiet=False)
+logger = setup_logger(verbose=True, quiet=False)
 
 
 class UDPHeader:
@@ -56,7 +56,7 @@ class UDPHeader:
 				# Desplazamos 1 a la izquierda por (31 - n) posiciones para establecer el bit
 				bits |= (1 << (31 - n))
 			else:
-				print(f"Posición {n} fuera de rango. Debe estar entre 0 y 31.")
+				logger.info(f"Posición {n} fuera de rango. Debe estar entre 0 y 31.")
 		
 		self.sack = bits
 

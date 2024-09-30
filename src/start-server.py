@@ -91,7 +91,6 @@ def handle_connection(server_socket, storage_dir, logger):
 
         # Confirmacion de inicio de conexion
         elif header.has_flag(UDPFlags.START) and header.has_flag(UDPFlags.ACK):
-            print("JOya")
             if not connection.is_active:
                 connection.is_active = True
                 if not connection.is_alive():
@@ -138,7 +137,7 @@ def start_server():
 
 
 def limpiar_recursos(signum, frame):
-    print(f"Recibiendo señal {signum}, limpiando recursos...")
+    logger.info(f"Recibiendo señal {signum}, limpiando recursos...")
     for addr, connection in connections.items():
         connection.is_active = False
         if connection.is_alive():
