@@ -153,6 +153,8 @@ def handle_ack_sack(header: UDPHeader):
 					print("Borrando fragmento SACK", i, " sequence: ", connection.sequence, " header " , header.sequence)
 					#connection.window_sents -= 1
 					del connection.fragments[i]
+	if header.has_close():
+		connection.is_active = False
 
 
 def upload_with_sack(dir, name):
