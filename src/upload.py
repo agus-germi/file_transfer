@@ -127,7 +127,7 @@ def send_sack_data():
 
 		send_data(client_socket, connection, data, sequence=key)
 		connection.window_sents += 1
-		#print("Enviando paquete ", key, " quedan : ", len(connection.fragments))
+		print("Enviando paquete ", key, " quedan : ", len(connection.fragments))
 	
 	# Se enviaron por completo el archivo
 	if not connection.fragments:

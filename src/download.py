@@ -223,7 +223,7 @@ if __name__ == "__main__":
 			handle_download(args.protocol)
 	except ValueError as e:
 		logger.error(e)
-		logger.error(traceback.format_exc())
+		#logger.error(traceback.format_exc())
 	except Exception as e:
 		logger.error(f"Error en main: {e}")
 		logger.error(traceback.format_exc())

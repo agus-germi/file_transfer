@@ -27,6 +27,9 @@ logger = setup_logger(verbose=args.verbose, quiet=args.quiet)
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 server_address = (args.host, args.port)
 logger.info(f"Server listening on {server_address}")
+
+recv_buffer_size = 1024 * 1024  # 1 MB
+server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, recv_buffer_size)
 server_socket.bind(server_address)
 
 
@@ -62,6 +65,7 @@ def check_connection(
         else:
             logger.info(f"Mensaje Recibido: {addr} [Start] con protocolo Stop and Wait")
         send_start_confirmation(server_socket, connection)
+        send_start_confirmation(server_socket, connection)
         connections[addr] = connection
     else:
         reject_connection(server_socket, connection)
@@ -90,7 +94,8 @@ def handle_connection(server_socket, storage_dir, logger):
             print("JOya")
             if not connection.is_active:
                 connection.is_active = True
-                connection.start()
+                if not connection.is_alive():
+                    connection.start()
             
 		# Confirmacion de recepcion de paquete de fin (download)
         elif header.has_flag(UDPFlags.END) and header.has_flag(UDPFlags.ACK):
