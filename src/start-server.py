@@ -66,8 +66,10 @@ def check_connection(
 
 
 def handle_connection(server_socket, storage_dir, logger):
+    """Maneja las conexiones con los clientes, tanto nuevas como de clientes ya conectados.
+    Recibe paquetes de datos y controla su contenido según corresponda. """
     try:
-        addr, header, data = receive_package(server_socket)
+        addr, header, data = receive_package(server_socket) #Espera hasta que haya datos
 
         if not connections.get(addr):
             check_connection(server_socket, addr, header, data, storage_dir, logger)
@@ -117,6 +119,7 @@ def handle_connection(server_socket, storage_dir, logger):
 
 
 def start_server():
+    """Inicia el servidor y lo mantiene en un bucle."""
     try:
         while True:
             handle_connection(server_socket, args.storage, logger)
