@@ -9,7 +9,7 @@ from lib.logger import setup_logger
 from lib.utils import setup_signal_handling
 from lib.connection import Connection, CloseConnectionException, send_package, receive_package, close_connection, send_end, send_ack, send_end_confirmation, send_sack_ack, confirm_send
 from lib.udp import UDPFlags, UDPHeader
-from lib.constants import MAX_RETRIES, TIMEOUT, FRAGMENT_SIZE
+from lib.constants import MAX_RETRIES, TIMEOUT, TIMEOUT_SACK, FRAGMENT_SIZE
 
 
 UPLOAD = False
@@ -69,6 +69,8 @@ def download_stop_and_wait():
 		try:
 			addr, header, data = receive_package(client_socket)
 			if header.has_data():
+				# Cuando recibo data exitosamente reseteo el retries
+				connection.retrys = 0
 				if header.sequence not in connection.fragments:
 					connection.fragments[header.sequence] = data
 					connection.sequence = header.sequence
@@ -94,14 +96,16 @@ def download_stop_and_wait():
 		except ConnectionResetError:
 			logger.error("Error: Conexion perdida")
 		except socket.timeout:
-			send_ack(client_socket, connection, sequence=header.sequence)
-			logger.warning(f"Reenviando ACK {header.sequence}")
+			send_ack(client_socket, connection, sequence=connection.sequence)
+			logger.warning(f"Reenviando ACK {connection.sequence}")
 			if connection.retrys > MAX_RETRIES:
 				# TODO Nunca se sube el retries
 				return False
+			connection.retrys += 1
 
 
 def download_with_sack():
+	client_socket.settimeout(TIMEOUT_SACK)
 	connection.is_active = True
 	expected_sequence = 0
 
@@ -119,14 +123,16 @@ def download_with_sack():
 					logger.info(f"Fragmento {header.sequence} recibido del servidor.")
 
 				if header.sequence == connection.sequence +1:
-					connection.sequence = header.sequence
-					connection.received_out_of_order.sort()
+					connection.sequence = header.sequence					
 					send_sack_ack(client_socket, connection, connection.sequence)
-					for i in connection.received_out_of_order:
+					connection.received_out_of_order.sort()
+					received_out_of_order = list(connection.received_out_of_order)
+					for i in received_out_of_order:
+						print("recibidos: ",received_out_of_order, " i: ", i)
 						if i == connection.sequence +1:
 							connection.sequence = i
-							send_sack_ack(client_socket, connection, connection.sequence)							
-							connection.received_out_of_order.remove(i)		
+							send_sack_ack(client_socket, connection, connection.sequence)
+							connection.received_out_of_order.remove(i)
 						else:
 							break
 
@@ -166,7 +172,7 @@ def download_with_sack():
 
 
 			send_sack_ack(client_socket, connection, connection.sequence, connection.received_out_of_order)
-			logger.info(f"SACK enviado. Último ACK: { connection.sequence }, SACK: {bin(header.sack)[2:].zfill(32)}")
+			#logger.info(f"SACK enviado. Último ACK: { connection.sequence }, SACK: {bin(header.sack)[2:].zfill(32)}")
 
 	return True
 

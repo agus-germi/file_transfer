@@ -79,7 +79,8 @@ def handle_connection(server_socket, storage_dir, logger):
         # No se inicializo la conexion y se recibio un paquete de datos
         if header.has_flag(UDPFlags.DATA) and not connection.is_active:
             connection.is_active = False
-            connection.join()  # Para cerrar el thread de la conexion
+            if connection.is_alive():
+                connection.join()
             close_connection(server_socket, connection)
             connections.pop(addr)
 
@@ -91,7 +92,8 @@ def handle_connection(server_socket, storage_dir, logger):
 		# Confirmacion de recepcion de paquete de fin (download)
         elif header.has_flag(UDPFlags.END) and header.has_flag(UDPFlags.ACK):
             connection.is_active = False
-            connection.join()
+            if connection.is_alive():
+                connection.join()
             logger.info(f"Mensaje Recibido: {addr} [END]")
             close_connection(server_socket, connection)
 
@@ -103,7 +105,8 @@ def handle_connection(server_socket, storage_dir, logger):
         elif header.has_flag(UDPFlags.CLOSE):
             logger.info(f"Mensaje Recibido: {addr} [Close]")
             connection.is_active = False
-            connection.join()
+            if connection.is_alive():
+                connection.join()
             connections.pop(addr)
             # TODO Habria que cerrar desde el server?
             # Si se pierde el paquete este -> El server por ttl sabe que tiene que cerrar esta conexion
@@ -131,7 +134,9 @@ def limpiar_recursos(signum, frame):
     print(f"Recibiendo señal {signum}, limpiando recursos...")
     for addr, connection in connections.items():
         connection.is_active = False
-        connection.join()
+        if connection.is_alive():
+            connection.join()
+        close_connection(server_socket,connection)
     server_socket.close()
     sys.exit(0)  # Salgo del programa con código 0 (éxito)
 

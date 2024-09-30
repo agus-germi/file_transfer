@@ -1,11 +1,12 @@
 import struct
+import time
 import socket
 import threading
 import queue
 import os
 import select
 
-from lib.constants import TIMEOUT, FRAGMENT_SIZE, PACKAGE_SIZE, MAX_RETRIES, SACK_WINDOW_SIZE
+from lib.constants import TIMEOUT, TIMEOUT_SACK, FRAGMENT_SIZE, PACKAGE_SIZE, MAX_RETRIES, SACK_WINDOW_SIZE, SEND_WINDOW_SIZE, PACKAGE_SEND_DELAY, MAX_TTL
 from lib.udp import UDPHeader, UDPFlags, UDPPackage
 from lib.logger import setup_logger
 
@@ -41,8 +42,6 @@ class BaseConnection:
 		if not os.path.exists(dir):
 			os.makedirs(dir)
 
-		# TODO Ver de ordernar self.fragments en orden ascendente para que el file se guarde bien
-		# Pero creo que esta sorted, PROBAR
 		with open(output_path, "wb") as f:
 			for i in sorted(self.fragments.keys()):
 				f.write(self.fragments[i])
@@ -59,7 +58,8 @@ class BaseConnection:
 			logger.error(f"Error: Archivo {self.path} no encontrado.")
 			self.is_active = False
 			# TODO No existe el socket en este contexto -> si el archivo no existe romperia
-			close_connection(self.socket, self, "Archivo no encontrado.")
+			if hasattr(self, 'socket'):
+				close_connection(self.socket, self, "Archivo no encontrado.")
 
 	
 	def send_end_confirmation(self):
@@ -83,20 +83,22 @@ class ClientConnection(BaseConnection, threading.Thread):
 
 		while self.is_active:
 			try:
-				message = self.message_queue.get(timeout=2)
+				message = self.message_queue.get(timeout=TIMEOUT)
 
 				if self.upload:
 					if message["header"].has_data():
+						self.ttl = 0
 						self.receive_data(message)
 					elif message["header"].has_end():
 						self.send_end_confirmation()
 				else:
 					self.send_data(message)
+					
 
 			except queue.Empty:
 				logger.warning(f"Cliente {self.addr} no ha enviado mensajes recientes.")
-				if self.ttl >= 10:
-					logger.warning(f"Cliente {self.addr} inactivo por 5 intentos.")
+				if self.ttl >= MAX_TTL:
+					logger.warning(f"Cliente {self.addr} inactivo por {MAX_TTL} intentos.")
 					self.is_active = False
 				elif self.ttl <= MAX_RETRIES and self.download:
 					self.send_data()
@@ -125,6 +127,7 @@ class ClientConnection(BaseConnection, threading.Thread):
 
 	def send_data(self, message=None):
 		if message and message["header"].has_ack():
+			self.ttl = 0
 			sequence = message["header"].sequence
 			logger.info(f"ACK {sequence} recibido desde {self}")
 			if sequence in self.fragments:
@@ -153,25 +156,28 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 
 		while self.is_active:
 			try:
-				message = self.message_queue.get(timeout=2)
+				message = self.message_queue.get(timeout=TIMEOUT_SACK)
 
 				if self.upload:
 					if message["header"].has_data():
+						print("RECIBI DATA ", message["header"].sequence)
 						self.receive_data(message)
 					elif message["header"].has_end():
+						print("RECIBI END ", message["header"].sequence)
 						self.send_end_confirmation()
 				else:
 					self.handle_sack_ack(message)
 					while not self.message_queue.empty():
-						message = self.message_queue.get(timeout=2)
+						message = self.message_queue.get(timeout=TIMEOUT_SACK)
 						self.handle_sack_ack(message)
 					self.send_data_sack()
-
+					# Para que el cliente no sature al servidor con el envio de paquetes
+					time.sleep(PACKAGE_SEND_DELAY)
 
 			except queue.Empty:
 				logger.warning(f"Cliente {self.addr} no ha enviado mensajes recientes.")
-				if self.ttl >= 10:
-					logger.warning(f"Cliente {self.addr} inactivo por 5 intentos.")
+				if self.ttl >= MAX_TTL:
+					logger.warning(f"Cliente {self.addr} inactivo por {MAX_TTL} intentos.")
 					self.is_active = False
 				elif self.ttl <= MAX_RETRIES and self.download:
 					self.send_data_sack()
@@ -184,7 +190,7 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 
 	def send_data_sack(self):
 		for seq, (key, data) in enumerate(self.fragments.items()):
-			if seq >= SACK_WINDOW_SIZE or self.window_sents > SACK_WINDOW_SIZE:  # Solo mandamos los primeros 8 elementos
+			if seq >= SACK_WINDOW_SIZE or self.window_sents > SEND_WINDOW_SIZE:  # Solo mandamos los primeros 8 elementos
 				break
 			if key > self.sequence + 30:
 				break
@@ -210,18 +216,21 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 
 		if message["header"].sequence == self.sequence +1:
 			self.sequence = message["header"].sequence
+			send_sack_ack(self.socket, self, self.sequence)
 			self.received_out_of_order.sort()
-			for i in self.received_out_of_order:
-				if i == self.sequence +1:
-					send_sack_ack(self.socket, self, self.sequence)
+			received_out_of_order = list(self.received_out_of_order)
+			for i in received_out_of_order:
+				print("Recibidos: ", received_out_of_order, " i: ",i )
+				if i == self.sequence +1:					
 					self.sequence = i
+					send_sack_ack(self.socket, self, self.sequence)
 					self.received_out_of_order.remove(i)
 				else:
 					break
 
 		elif message["header"].sequence > self.sequence +1:
 			logger.warning(f"Fragmento {message['header'].sequence} recibido fuera de orden.")
-			if message["header"] not in self.received_out_of_order:
+			if message["header"].sequence not in self.received_out_of_order:
 				self.received_out_of_order.append(message["header"].sequence)
 
 		
@@ -232,6 +241,7 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 
 	def handle_sack_ack(self, message):
 		if message["header"].has_ack():
+			self.window_sents -= 1
 			if message["header"].sequence > self.sequence:
 				self.window_sents -= message["header"].sequence - self.sequence
 				seq = self.sequence
@@ -241,6 +251,7 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 				for i in range(seq, message["header"].sequence +1):
 					self.sequence = i
 					if i in self.fragments:
+						self.window_sents -= 1
 						print("Borrando fragmento ", i)
 						del self.fragments[i]
 				
