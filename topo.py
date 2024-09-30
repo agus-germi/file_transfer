@@ -5,7 +5,7 @@ from mininet.node import Controller
 from mininet.link import TCLink
 from mininet.cli import CLI
 from mininet.util import dumpPorts
-from mininet.term import makeTerms
+from mininet.term import makeTerms, cleanUpScreens
 
 
 class MyTopo(Topo):
@@ -43,5 +43,6 @@ if __name__ == "__main__":
     net.start()
     dumpPorts(net.hosts)
     makeTerms(net.hosts)
-
     CLI(net)
+    cleanUpScreens()
+    net.stop()
