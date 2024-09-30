@@ -58,6 +58,7 @@ def connect_server(protocol):
 		if header.has_ack() and header.has_start() and header.sequence == 0:
 			header.set_flag(UDPFlags.ACK)
 			send_package(client_socket, connection, header, b"")
+			send_package(client_socket, connection, header, b"")
 			logger.info("Conexión establecida con el servidor.")
 			return True
 		else:
@@ -91,6 +92,8 @@ def upload_stop_and_wait(dir, name):
 				logger.info(f"ACK {connection.sequence} recibido del servidor.")
 				if header.sequence in connection.fragments:
 					connection.fragments.pop(header.sequence)
+			elif header.has_close():
+				connection.is_active = False
 			else:
 				logger.error(
 					f"Received ACK {header.sequence} is not {connection.sequence} "
