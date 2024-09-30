@@ -133,7 +133,7 @@ def send_sack_data():
 
         send_data(client_socket, connection, data, sequence=key)
         connection.window_sents += 1
-        logger.info(f"Enviando paquete ", {key}, " quedan : ", {len(connection.fragments)})
+        logger.info(f"Enviando paquete  {key}  quedan {len(connection.fragments)}")
 
     # Se enviaron por completo el archivo
     if not connection.fragments:
@@ -149,15 +149,15 @@ def handle_ack_sack(header: UDPHeader):
             seq = connection.sequence
             connection.sequence = header.sequence
             logger.info(
-                f"ACK recibido ",
+                f"ACK recibido 
                 {header.sequence},
-                " Nuevo sequence: ",
-                {connection.sequence},
+                Nuevo sequence: 
+                {connection.sequence}"
             )
 
             for i in range(seq, header.sequence + 1):
                 if i in connection.fragments:
-                    logger.info(f"Borrando fragmento ", {i})
+                    logger.info(f"Borrando fragmento {i}")
                     del connection.fragments[i]
 
         else:
@@ -165,12 +165,13 @@ def handle_ack_sack(header: UDPHeader):
             for i in sack:
                 if i in connection.fragments:
                     logger.info(
-                        f"Borrando fragmento SACK",
+                        f"Borrando fragmento SACK,
                         {i},
-                        " sequence: ",
+                         sequence: ,
                         {connection.sequence},
-                        " header ",
+                         header ,
                         {header.sequence},
+                        "
                     )
                     # connection.window_sents -= 1
                     del connection.fragments[i]
@@ -201,7 +202,7 @@ def upload_with_sack(dir, name):
         except TimeoutError:
             logger.error("TIMEOUT")
             connection.window_sents -= SACK_WINDOW_SIZE / 2
-            logger.info(f"Quedan fragmentos: ", {len(connection.fragments)})
+            logger.info(f"Quedan fragmentos:  {len(connection.fragments)}")
             time.sleep(PACKAGE_SEND_DELAY * 2)
             send_sack_data()
         except Exception as e:

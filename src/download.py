@@ -86,7 +86,7 @@ def download_stop_and_wait():
                     logger.warning(f"Fragmento {header.sequence} ya recibido.")
 
                 send_ack(client_socket, connection, sequence=header.sequence)
-                logger.info("Se envio ACK ", header.sequence)
+                logger.info(f"Se envio ACK  {header.sequence}")
 
             # Se recibio por completo el archivo
             elif header.has_end():
@@ -130,7 +130,7 @@ def download_with_sack():
                     connection.received_out_of_order.sort()
                     received_out_of_order = list(connection.received_out_of_order)
                     for i in received_out_of_order:
-                        logger.info(f"Recibidos: ", {received_out_of_order}, " i: ", {i})
+                        logger.info(f"Recibidos: , {received_out_of_order},  i: , {i}")
                         if i == connection.sequence + 1:
                             connection.sequence = i
                             send_sack_ack(

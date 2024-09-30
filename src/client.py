@@ -37,8 +37,8 @@ def connect_server():
     try:
         send_package(client_socket, connection, header, connection.path.encode())
         addr, header, data = receive_package(client_socket)
-        logger.info(f"Header: ", {header.get_sequences()})
-        logger.info(f"Sack: ", {format(header.sack, f"0{32}b")})
+        logger.info(f"Header: , {header.get_sequences()}")
+        logger.info(f"Sack:  {format(header.sack, f"0{32}b")}")
 
         if header.has_ack() and header.has_start() and header.sequence == 0:
             header.set_flag(UDPFlags.ACK)

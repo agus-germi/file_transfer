@@ -62,7 +62,7 @@ class BaseConnection:
             with open(self.path, "rb") as f:
                 for i, fragment in enumerate(iter(lambda: f.read(FRAGMENT_SIZE), b"")):
                     self.fragments[i + 1] = fragment
-            logger.info(f"Fragments listos para enviar ", {len(self.fragments)})
+            logger.info(f"Fragments listos para enviar {len(self.fragments)}")
         except FileNotFoundError:
             logger.error(f"Error: Archivo {self.path} no encontrado.")
             self.is_active = False
@@ -222,11 +222,11 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 
             # Print saber que segmentos quedan cuando quedan pocos
             if len(self.fragments) < 10:
-                logger.info(f"FRAG: ", {self.fragments.keys()})
+                logger.info(f"FRAG:  {self.fragments.keys()}")
 
             send_data(self.socket, self, data, sequence=key)
             self.window_sents += 1
-            logger.info(f"Enviando paquete ", {key}, " - Secuencia: ", {self.sequence})
+            logger.info(f"Enviando paquete {key} - Secuencia:  {self.sequence}")
 
         if not self.fragments:
             send_end(self.socket, self)
@@ -243,7 +243,7 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
             self.received_out_of_order.sort()
             received_out_of_order = list(self.received_out_of_order)
             for i in received_out_of_order:
-                logger.info(f"Recibidos OutOrder: ", {received_out_of_order}, " i: ", {i})
+                logger.info(f"Recibidos OutOrder:  {received_out_of_order} i: {i}")
                 if i == self.sequence + 1:
                     self.sequence = i
                     # send_sack_ack(self.socket, self, self.sequence)
@@ -270,17 +270,17 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
                 seq = self.sequence
                 self.sequence = message["header"].sequence
                 logger.info(
-                    f"ACK recibido ",
+                    f"ACK recibido ,
                     {message["header"].sequence},
-                    " Nuevo sequence: ",
-                    {self.sequence},
+                    Nuevo sequence:,
+                    {self.sequence}"
                 )
 
                 for i in range(seq, message["header"].sequence + 1):
                     self.sequence = i
                     if i in self.fragments:
                         self.window_sents -= 1
-                        logger.info(f"Borrando fragmento ", {i})
+                        logger.info(f"Borrando fragmento {i}")
                         del self.fragments[i]
 
             else:
@@ -288,12 +288,12 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
                 for i in sack:
                     if i in self.fragments:
                         logger.info(
-                            f"Borrando fragmento SACK",
+                            f"Borrando fragmento SACK,
                             {i},
-                            " sequence: ",
+                            sequence: ,
                             {self.sequence},
-                            " header ",
-                            {message["header"].sequence},
+                            header ,
+                            {message["header"].sequence}"
                         )
                         self.window_sents -= 1
                         del self.fragments[i]

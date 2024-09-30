@@ -115,7 +115,6 @@ def handle_connection(server_socket, storage_dir, logger):
             # Si se pierde el paquete este -> El server por ttl sabe que tiene que cerrar esta conexion
             logger.info(f"Cliente Desconectado: {addr}")
         else:
-            # logger.info(f"Mensaje Recibido: {addr}")
             message = {"addr": addr, "header": header, "data": data}
             connection.put_message(message)
 
