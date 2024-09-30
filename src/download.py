@@ -109,10 +109,6 @@ def download_stop_and_wait():
 def download_with_sack():
 	client_socket.settimeout(TIMEOUT_SACK)
 	connection.is_active = True
-	expected_sequence = 0
-
-	#diccionario auxiliar para guardar cuantos retries tuvo cada paquete
-	retries_per_packet = {}
 
 	while connection.is_active:
 		try:
@@ -120,6 +116,7 @@ def download_with_sack():
 			
 			if header.has_data():
 				#print("OutOrder: ", received_out_of_order)
+				connection.retrys = 0
 				if header.sequence not in connection.fragments:
 					connection.fragments[header.sequence] = data
 					logger.info(f"Fragmento {header.sequence} recibido del servidor.")
@@ -161,20 +158,13 @@ def download_with_sack():
 
 		except socket.timeout:
 			# Manejo de tiempo de espera: reenviar el último SACK
-			print("Timeout")
-			# Actualizo el diccionario de retries, si no tuve ninguno le cargo 1, si ya tuve le sumo 1.
-			if expected_sequence in retries_per_packet:
-				retries_per_packet[expected_sequence] +=1
-			else: retries_per_packet[expected_sequence] = 1
-
-			# Si tuve el maximo numero de retries para un paquete, mato la conexion
-			if retries_per_packet[expected_sequence] >= MAX_RETRIES:
-				logger.error("Numero maximo de reintentos alcanzado. Cerrando conexion.")
-				return False
-
-
 			send_sack_ack(client_socket, connection, connection.sequence, connection.received_out_of_order)
-			#logger.info(f"SACK enviado. Último ACK: { connection.sequence }, SACK: {bin(header.sack)[2:].zfill(32)}")
+			print("Timeout")
+			if connection.retrys > MAX_RETRIES:
+				# TODO Nunca se sube el retries
+				connection.is_active = False
+				return False
+			connection.retrys += 1
 
 	return True
 
