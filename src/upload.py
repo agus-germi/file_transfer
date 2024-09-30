@@ -148,12 +148,7 @@ def handle_ack_sack(header: UDPHeader):
 
             seq = connection.sequence
             connection.sequence = header.sequence
-            logger.info(
-                f"ACK recibido 
-                {header.sequence},
-                Nuevo sequence: 
-                {connection.sequence}"
-            )
+
 
             for i in range(seq, header.sequence + 1):
                 if i in connection.fragments:
@@ -164,15 +159,6 @@ def handle_ack_sack(header: UDPHeader):
             sack = header.get_sequences()[1]
             for i in sack:
                 if i in connection.fragments:
-                    logger.info(
-                        f"Borrando fragmento SACK,
-                        {i},
-                         sequence: ,
-                        {connection.sequence},
-                         header ,
-                        {header.sequence},
-                        "
-                    )
                     # connection.window_sents -= 1
                     del connection.fragments[i]
     if header.has_close():

@@ -269,12 +269,6 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
                 self.window_sents -= message["header"].sequence - self.sequence
                 seq = self.sequence
                 self.sequence = message["header"].sequence
-                logger.info(
-                    f"ACK recibido ,
-                    {message["header"].sequence},
-                    Nuevo sequence:,
-                    {self.sequence}"
-                )
 
                 for i in range(seq, message["header"].sequence + 1):
                     self.sequence = i
@@ -287,14 +281,6 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
                 sack = message["header"].get_sequences()[1]
                 for i in sack:
                     if i in self.fragments:
-                        logger.info(
-                            f"Borrando fragmento SACK,
-                            {i},
-                            sequence: ,
-                            {self.sequence},
-                            header ,
-                            {message["header"].sequence}"
-                        )
                         self.window_sents -= 1
                         del self.fragments[i]
 
