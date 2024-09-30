@@ -1,5 +1,8 @@
 import socket
 import time
+import signal
+import sys
+import os
 import traceback
 from lib.logger import setup_logger
 from lib.utils import setup_signal_handling
@@ -11,11 +14,11 @@ from lib.connection import (
 	close_connection,
 	send_data,
 	send_end,
-	confirm_send,
+	force_send_end,
 	is_data_available,
 )
 from lib.udp import UDPFlags, UDPHeader
-from lib.constants import TIMEOUT, TIMEOUT_SACK, FRAGMENT_SIZE, SACK_WINDOW_SIZE, SEND_WINDOW_SIZE, PACKAGE_SEND_DELAY
+from lib.constants import TIMEOUT, TIMEOUT_SACK, FRAGMENT_SIZE, SACK_WINDOW_SIZE, SEND_WINDOW_SIZE, PACKAGE_SEND_DELAY, MAX_SAC_DIF
 
 from collections import deque
 
@@ -111,21 +114,20 @@ def send_sack_data():
 			if connection.window_sents > SEND_WINDOW_SIZE:
 				print("ASADASfasfadsdfasfg")
 			break
-		if key > connection.sequence + 30: # Nunca haya tanta difrencia entre el puntero del server y el mio
+		if key > connection.sequence + MAX_SAC_DIF:
 			print("Se me lleno la cola")
 			break
 
 		# Print saber que segmentos quedan cuando quedan pocos
-		if len(connection.fragments) < 10:
-			print("FRAG: ", connection.fragments.keys())
+		#if len(connection.fragments) < 10:
+		#	print("FRAG: ", connection.fragments.keys())
 
 		send_data(client_socket, connection, data, sequence=key)
 		connection.window_sents += 1
-		print("Enviando paquete ", key, " quedan : ", len(connection.fragments))
+		#print("Enviando paquete ", key, " quedan : ", len(connection.fragments))
 	
+	# Se enviaron por completo el archivo
 	if not connection.fragments:
-		print("enviando paquete de end, quedan: ", len(connection.fragments))
-		send_end(client_socket, connection)
 		connection.is_active = False
 
 
@@ -133,8 +135,8 @@ def handle_ack_sack(header: UDPHeader):
 	if header.has_ack():
 		connection.window_sents -= 1
 		if header.sequence > connection.sequence:
-			#connection.window_sents -= header.sequence - connection.sequence
-			#connection.window_sents = 0
+			connection.window_sents -= header.sequence - connection.sequence
+			
 			seq = connection.sequence
 			connection.sequence = header.sequence
 			print("ACK recibido ", header.sequence, " Nuevo sequence: ", connection.sequence)
@@ -147,8 +149,8 @@ def handle_ack_sack(header: UDPHeader):
 		else:
 			sack = header.get_sequences()[1]
 			for i in sack:
-				print("Borrando fragmento SACK", i, " sequence: ", connection.sequence, " header " , header.sequence)
 				if i in connection.fragments:
+					print("Borrando fragmento SACK", i, " sequence: ", connection.sequence, " header " , header.sequence)
 					#connection.window_sents -= 1
 					del connection.fragments[i]
 
@@ -165,6 +167,7 @@ def upload_with_sack(dir, name):
 		try:		
 			addr, header, data = receive_package(client_socket)
 			handle_ack_sack(header)
+			print("AAheader sequence: ", header.sequence)
 			while is_data_available(client_socket):
 				addr, header, data = receive_package(client_socket)
 				print("header sequence: ", header.sequence)
@@ -176,8 +179,9 @@ def upload_with_sack(dir, name):
 
 		except TimeoutError:
 			logger.error("TIMEOUT")
-			connection.window_sents -= SACK_WINDOW_SIZE
+			connection.window_sents -= SACK_WINDOW_SIZE/2
 			print("quedan fragmentos: ", len(connection.fragments))
+			time.sleep(PACKAGE_SEND_DELAY*2)
 			send_sack_data()
 		except Exception as e:
 			logger.error("Traceback info:\n" + traceback.format_exc())
@@ -193,13 +197,28 @@ def handle_upload(dir, name, protocol):
 			logger.error(f"Protocolo no soportado: {protocol}")
 			raise ValueError(f"Protocolo no soportado: {protocol}")
 		
-		confirm_send(client_socket, connection, send_end)
-		logger.info("Archivo enviado exitosamente.")
+		if not connection.fragments and connection.sequence > 1:
+			force_send_end(client_socket, connection, send_end)
+			logger.info(f"Archivo cargado exitosamente")
 	except Exception as e:
 		logger.error(f"Error durante el upload: {e}")
 	finally:
-		print("Cierro conexion el finally")
 		close_connection(client_socket, connection)
+
+
+
+def limpiar_recursos(signum, frame):
+	print(f"Recibiendo señal {signum}, limpiando recursos...")
+	close_connection(client_socket, connection)
+	sys.exit(0)  # Salgo del programa con código 0 (éxito)
+
+
+def setup_signal_handling():
+	signal.signal(signal.SIGINT, limpiar_recursos)
+	signal.signal(signal.SIGTERM, limpiar_recursos)
+	if os.name != "nt":
+		signal.signal(signal.SIGQUIT, limpiar_recursos)
+		signal.signal(signal.SIGHUP, limpiar_recursos)
 
 
 if __name__ == "__main__":

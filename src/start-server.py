@@ -8,16 +8,18 @@ from lib.connection import (
     close_connection,
     send_start_confirmation,
     send_end_confirmation,
+    Connection,
     ClientConnection,
-    ClientConnectionSACK
+    ClientConnectionSACK,
 )
 from lib.udp import UDPFlags, UDPHeader
 import signal
+from typing import List
 import sys
 import os
 
 
-connections = {}
+connections: dict[Connection] = {}
 args = parse_server_args()
 logger = setup_logger(verbose=args.verbose, quiet=args.quiet)
 
@@ -70,7 +72,8 @@ def handle_connection(server_socket, storage_dir, logger):
         addr, header, data = receive_package(server_socket)
 
         if not connections.get(addr):
-            check_connection(server_socket, addr, header, data, storage_dir, logger)
+            if header.has_start():
+                check_connection(server_socket, addr, header, data, storage_dir, logger)
             return None
 
         connection = connections.get(addr)
@@ -84,8 +87,10 @@ def handle_connection(server_socket, storage_dir, logger):
 
         # Confirmacion de inicio de conexion
         elif header.has_flag(UDPFlags.START) and header.has_flag(UDPFlags.ACK):
-            connection.is_active = True
-            connection.start()
+            print("JOya")
+            if not connection.is_active:
+                connection.is_active = True
+                connection.start()
             
 		# Confirmacion de recepcion de paquete de fin (download)
         elif header.has_flag(UDPFlags.END) and header.has_flag(UDPFlags.ACK):
@@ -110,7 +115,7 @@ def handle_connection(server_socket, storage_dir, logger):
             # Si se pierde el paquete este -> El server por ttl sabe que tiene que cerrar esta conexion
             logger.info(f"Cliente Desconectado: {addr}")
         else:
-            logger.info(f"Mensaje Recibido: {addr}")
+            #logger.info(f"Mensaje Recibido: {addr}")
             message = {"addr": addr, "header": header, "data": data}
             connection.put_message(message)
 

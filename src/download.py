@@ -7,7 +7,7 @@ import time
 from lib.parser import parse_download_args
 from lib.logger import setup_logger
 from lib.utils import setup_signal_handling
-from lib.connection import Connection, CloseConnectionException, send_package, receive_package, close_connection, send_end, send_ack, send_end_confirmation, send_sack_ack, confirm_send
+from lib.connection import Connection, CloseConnectionException, send_package, receive_package, close_connection, send_end, send_ack, send_end_confirmation, send_sack_ack, force_send_end
 from lib.udp import UDPFlags, UDPHeader
 from lib.constants import MAX_RETRIES, TIMEOUT, TIMEOUT_SACK, FRAGMENT_SIZE
 
@@ -48,6 +48,7 @@ def connect_server(protocol):
 
 		if header.has_ack() and header.has_start() and header.sequence == 0:
 			header.set_flag(UDPFlags.ACK)
+			send_package(client_socket, connection, header, b"")
 			send_package(client_socket, connection, header, b"")
 			logger.info("Conexión establecida con el servidor.")
 			return True
@@ -100,6 +101,7 @@ def download_stop_and_wait():
 			logger.warning(f"Reenviando ACK {connection.sequence}")
 			if connection.retrys > MAX_RETRIES:
 				# TODO Nunca se sube el retries
+				connection.is_active = False
 				return False
 			connection.retrys += 1
 
@@ -188,8 +190,7 @@ def handle_download(protocol):
 		logger.error(f"Protocolo no soportado: {protocol}")
 		raise ValueError(f"Protocolo no soportado: {protocol}")
 
-	confirm_send(client_socket, connection, send_end_confirmation)
-	logger.info("Archivo recibido exitosamente.")
+	force_send_end(client_socket, connection, send_end_confirmation)
 	
 	try:
 		pass
@@ -197,6 +198,21 @@ def handle_download(protocol):
 		logger.error(f"Error durante el download: {e}")
 	finally:
 		close_connection(client_socket, connection)
+
+
+
+def limpiar_recursos(signum, frame):
+	print(f"Recibiendo señal {signum}, limpiando recursos...")
+	close_connection(client_socket, connection)
+	sys.exit(0)  # Salgo del programa con código 0 (éxito)
+
+
+def setup_signal_handling():
+	signal.signal(signal.SIGINT, limpiar_recursos)
+	signal.signal(signal.SIGTERM, limpiar_recursos)
+	if os.name != "nt":
+		signal.signal(signal.SIGQUIT, limpiar_recursos)
+		signal.signal(signal.SIGHUP, limpiar_recursos)
 
 
 if __name__ == "__main__":
@@ -212,4 +228,5 @@ if __name__ == "__main__":
 		logger.error(f"Error en main: {e}")
 		logger.error(traceback.format_exc())
 	finally:
+		close_connection(client_socket, connection)
 		client_socket.close()

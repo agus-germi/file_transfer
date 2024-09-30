@@ -6,7 +6,7 @@ import queue
 import os
 import select
 
-from lib.constants import TIMEOUT, TIMEOUT_SACK, FRAGMENT_SIZE, PACKAGE_SIZE, MAX_RETRIES, SACK_WINDOW_SIZE, SEND_WINDOW_SIZE, PACKAGE_SEND_DELAY, MAX_TTL
+from lib.constants import TIMEOUT, TIMEOUT_SACK, FRAGMENT_SIZE, PACKAGE_SIZE, MAX_RETRIES, SACK_WINDOW_SIZE, SEND_WINDOW_SIZE, PACKAGE_SEND_DELAY, MAX_TTL, MAX_SAC_DIF
 from lib.udp import UDPHeader, UDPFlags, UDPPackage
 from lib.logger import setup_logger
 
@@ -100,8 +100,11 @@ class ClientConnection(BaseConnection, threading.Thread):
 				if self.ttl >= MAX_TTL:
 					logger.warning(f"Cliente {self.addr} inactivo por {MAX_TTL} intentos.")
 					self.is_active = False
-				elif self.ttl <= MAX_RETRIES and self.download:
-					self.send_data()
+				elif self.ttl <= MAX_RETRIES:
+					if self.upload:
+						send_ack(self.socket, self)
+					else:
+						self.send_data()
 
 				self.ttl += 1
 			except Exception as e:
@@ -160,10 +163,11 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 
 				if self.upload:
 					if message["header"].has_data():
-						print("RECIBI DATA ", message["header"].sequence)
+						self.ttl = 0
+						#print("RECIBI DATA ", message["header"].sequence)
 						self.receive_data(message)
 					elif message["header"].has_end():
-						print("RECIBI END ", message["header"].sequence)
+						logger.info(f"Mensaje Recibido: {self.addr} [END]")
 						self.send_end_confirmation()
 				else:
 					self.handle_sack_ack(message)
@@ -179,8 +183,11 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 				if self.ttl >= MAX_TTL:
 					logger.warning(f"Cliente {self.addr} inactivo por {MAX_TTL} intentos.")
 					self.is_active = False
-				elif self.ttl <= MAX_RETRIES and self.download:
-					self.send_data_sack()
+				elif self.ttl <= MAX_RETRIES:
+					if self.upload:
+						send_sack_ack(self.socket, self, self.sequence, self.received_out_of_order)
+					else:
+						self.send_data_sack()					
 
 				self.ttl += 1
 			except ValueError as e:
@@ -192,7 +199,7 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 		for seq, (key, data) in enumerate(self.fragments.items()):
 			if seq >= SACK_WINDOW_SIZE or self.window_sents > SEND_WINDOW_SIZE:  # Solo mandamos los primeros 8 elementos
 				break
-			if key > self.sequence + 30:
+			if key > self.sequence + MAX_SAC_DIF:
 				break
 
 			# Print saber que segmentos quedan cuando quedan pocos
@@ -216,17 +223,19 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 
 		if message["header"].sequence == self.sequence +1:
 			self.sequence = message["header"].sequence
-			send_sack_ack(self.socket, self, self.sequence)
+			#send_sack_ack(self.socket, self, self.sequence)
 			self.received_out_of_order.sort()
 			received_out_of_order = list(self.received_out_of_order)
 			for i in received_out_of_order:
-				print("Recibidos: ", received_out_of_order, " i: ",i )
+				print("Recibidos OutOrder: ", received_out_of_order, " i: ",i )
 				if i == self.sequence +1:					
 					self.sequence = i
-					send_sack_ack(self.socket, self, self.sequence)
+					#send_sack_ack(self.socket, self, self.sequence)
 					self.received_out_of_order.remove(i)
 				else:
 					break
+			send_sack_ack(self.socket, self, self.sequence, self.received_out_of_order)
+
 
 		elif message["header"].sequence > self.sequence +1:
 			logger.warning(f"Fragmento {message['header'].sequence} recibido fuera de orden.")
@@ -313,8 +322,8 @@ def send_sack_ack(socket: socket.socket, connection: Connection, sequence=None, 
 	header.set_flag(UDPFlags.ACK)
 	header.set_flag(UDPFlags.SACK)
 	header.set_sack(sack_packages)
-	if sack_packages:
-		print("Sack: ", format(header.sack, f'0{32}b'))
+	#if sack_packages:
+	#	print("Sack: ", format(header.sack, f'0{32}b'))
 	package = UDPPackage().pack(header, b"")
 	socket.sendto(package, connection.addr)
 
@@ -367,7 +376,7 @@ def reject_connection(socket: socket.socket, connection: Connection):
 		logger.info(f"Cliente Rechazado: {connection.addr}")
 
 
-def is_data_available(socket, timeout=0.0):
+def is_data_available(socket: socket.socket, timeout=0.0):
     # El primer argumento es la lista de sockets que queremos comprobar si están listos para leer
     # El segundo argumento es para escribir, y el tercero para errores (ambos no los necesitamos)
     ready = select.select([socket], [], [], timeout)
@@ -376,14 +385,13 @@ def is_data_available(socket, timeout=0.0):
 
 
 # Common to clients
-def confirm_send(socket, connection, function):
+def force_send_end(socket: socket.socket, connection: Connection, function):
 	for i in range(3):
 		try:
 			function(socket, connection)
 			addr, header, data = receive_package(socket)
-			if header.has_end() and header.has_ack():
+			if header.has_end():
 				break
 		except TimeoutError:
-			logger.warning(
-				"Tiempo de espera agotado al confirmar el final del archivo."
-			)
+			pass
+
