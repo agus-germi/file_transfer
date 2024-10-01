@@ -62,6 +62,7 @@ def upload_stop_and_wait():
 
 		try:
 			addr, header, data = receive_package(client_socket)
+			connection.retries = 0
 			if header.has_ack() and header.sequence == connection.sequence:
 				logger.info(f"ACK {connection.sequence} recibido del servidor.")
 				if header.sequence in connection.fragments:
