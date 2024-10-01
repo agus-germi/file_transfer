@@ -373,7 +373,6 @@ def receive_package(socket: socket.socket):
 def close_connection(socket: socket.socket, connection: Connection, data=""):
     header = UDPHeader(0)
     header.set_flag(UDPFlags.CLOSE)
-    logger.info("Enviando paquete de cierre ")
     send_package(socket, connection, header, data.encode())
 
 
@@ -401,6 +400,18 @@ def force_send_end(socket: socket.socket, connection: Connection, function):
             function(socket, connection)
             addr, header, data = receive_package(socket)
             if header.has_end():
+                break
+        except TimeoutError:
+            pass
+
+
+def force_send_close(socket: socket.socket, connection: Connection, function):
+    logger.info("Enviando paquete de cierre ")
+    for i in range(3):
+        try:
+            function(socket, connection)
+            addr, header, data = receive_package(socket)
+            if header.has_close():
                 break
         except TimeoutError:
             pass

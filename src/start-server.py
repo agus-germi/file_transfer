@@ -111,6 +111,7 @@ def handle_connection(server_socket, storage_dir, logger):
             if connection.is_alive():
                 connection.join()
             connections.pop(addr)
+            close_connection(server_socket, connection)
             # TODO Habria que cerrar desde el server?
             # Si se pierde el paquete este -> El server por ttl sabe que tiene que cerrar esta conexion
             logger.info(f"Cliente Desconectado: {addr}")

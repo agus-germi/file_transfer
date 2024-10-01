@@ -14,6 +14,7 @@ from lib.connection import (
     send_end_confirmation,
     send_sack_ack,
     force_send_end,
+    force_send_close,
 )
 from lib.udp import UDPFlags, UDPHeader
 from lib.constants import MAX_RETRIES, TIMEOUT, TIMEOUT_SACK
@@ -157,8 +158,9 @@ def download_with_sack():
 
             elif header.has_end():
                 connection.is_active = False
-                connection.save_file()
-                logger.info("Archivo recibido completamente.")
+                if len(connection.fragments) > 1:
+                    connection.save_file()
+                    logger.info("Archivo recibido completamente.")
 
             elif header.has_close():
                 connection.is_active = False
@@ -199,7 +201,7 @@ def handle_download(protocol):
     except Exception as e:
         logger.error(f"Error durante el download: {e}")
     finally:
-        close_connection(client_socket, connection)
+        force_send_close(client_socket, connection, close_connection)
 
 
 def limpiar_recursos(signum, frame):

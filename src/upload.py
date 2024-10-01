@@ -15,6 +15,7 @@ from lib.connection import (
     send_end,
     force_send_end,
     is_data_available,
+    force_send_close,
 )
 from lib.udp import UDPFlags, UDPHeader
 from lib.constants import (
@@ -211,7 +212,7 @@ def handle_upload(dir, name, protocol):
     except Exception as e:
         logger.error(f"Error durante el upload: {e}")
     finally:
-        close_connection(client_socket, connection)
+        force_send_close(client_socket, connection, close_connection)
 
 
 def limpiar_recursos(signum, frame):

@@ -1,7 +1,7 @@
 import struct
 
 
-TIMEOUT = 0.3  # Timeout in seconds
+TIMEOUT = 0.1  # Timeout in seconds
 TIMEOUT_SACK = 0.6  # Timeout in seconds
 MAX_RETRIES = 10  # Numero maximo de reintentos
 SACK_WINDOW_SIZE = 8
@@ -12,9 +12,9 @@ MAX_SAC_DIF = 25
 
 HEADER_FORMAT = "!B I I"
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
-FRAGMENT_SIZE = 4096 * 2
+FRAGMENT_SIZE = 4400
 PACKAGE_SIZE = HEADER_SIZE + FRAGMENT_SIZE
-PACKAGE_SEND_DELAY = 1
+PACKAGE_SEND_DELAY = 0.5
 
 
 HOST = "10.0.0.1"
