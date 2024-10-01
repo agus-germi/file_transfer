@@ -108,12 +108,6 @@ def upload_stop_and_wait(dir, name):
             logger.error(
                 f"ACK {connection.sequence} no recibido del servidor. Reenviando."
             )
-            send_data(
-                client_socket,
-                connection,
-                data,
-                sequence=connection.sequence,
-            )
 
 
 def send_sack_data():
@@ -128,9 +122,6 @@ def send_sack_data():
             # Se lleno la cola
             break
 
-        # Print saber que segmentos quedan cuando quedan pocos
-        # if len(connection.fragments) < 10:
-        # 	print("FRAG: ", connection.fragments.keys())
 
         send_data(client_socket, connection, data, sequence=key)
         connection.window_sents += 1
@@ -177,6 +168,7 @@ def upload_with_sack(dir, name):
     while connection.is_active:
         try:
             addr, header, data = receive_package(client_socket)
+            connection.retrys = 0
             handle_ack_sack(header)
             while is_data_available(client_socket):
                 addr, header, data = receive_package(client_socket)
@@ -189,9 +181,11 @@ def upload_with_sack(dir, name):
         except TimeoutError:
             logger.error("TIMEOUT")
             connection.window_sents -= SACK_WINDOW_SIZE / 2
-            logger.info(f"Quedan fragmentos:  {len(connection.fragments)}")
-            time.sleep(PACKAGE_SEND_DELAY * 2)
-            send_sack_data()
+            if connection.retrys % 3 == 0:
+                logger.info(f"Quedan fragmentos:  {len(connection.fragments)}")
+                #time.sleep(PACKAGE_SEND_DELAY * 2)
+                send_sack_data()
+            connection.retrys += 1
         except Exception as e:
             logger.error(f"Error: {e} - Traceback info:\n" + traceback.format_exc())
 
