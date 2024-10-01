@@ -4,7 +4,7 @@ import threading
 import queue
 import os
 import select
-import logging 
+import logging
 
 from lib.constants import (
     TIMEOUT,
@@ -228,7 +228,9 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
     def receive_data(self, message):
         if message["header"].sequence not in self.fragments:
             self.fragments[message["header"].sequence] = message["data"]
-            logger.info(f"Mensaje Recibido: {self.addr} [DATA] - Frag Seq: {message['header'].sequence}")
+            logger.info(
+                f"Mensaje Recibido: {self.addr} [DATA] - Frag Seq: {message['header'].sequence}"
+            )
 
         if message["header"].sequence == self.sequence + 1:
             self.sequence = message["header"].sequence
@@ -236,7 +238,9 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
             self.received_out_of_order.sort()
             received_out_of_order = list(self.received_out_of_order)
             for i in received_out_of_order:
-                logger.info(f"Recibidos OutOrder:  {self.received_out_of_order} - Borrando: {i}")
+                logger.info(
+                    f"Recibidos OutOrder:  {self.received_out_of_order} - Borrando: {i}"
+                )
                 if i == self.sequence + 1:
                     self.sequence = i
                     # send_sack_ack(self.socket, self, self.sequence)
@@ -408,32 +412,35 @@ def force_send_close(socket: socket.socket, connection: Connection, function):
         except TimeoutError:
             pass
 
-def connect_server(client_socket: socket.socket, connection: Connection, DOWNLOAD: bool, args):
-	header = UDPHeader(connection.sequence)
-	header.set_flag(UDPFlags.START)
-	if DOWNLOAD:
-		header.set_flag(UDPFlags.DOWNLOAD)
-	if args.protocol == "stop_and_wait":
-		header.clear_flag(UDPFlags.PROTOCOL)
-	elif args.protocol == "sack":
-		header.set_flag(UDPFlags.PROTOCOL)
 
-	try:
-		send_package(client_socket, connection, header, connection.path.encode())
-		addr, header, data = receive_package(client_socket)
+def connect_server(
+    client_socket: socket.socket, connection: Connection, DOWNLOAD: bool, args
+):
+    header = UDPHeader(connection.sequence)
+    header.set_flag(UDPFlags.START)
+    if DOWNLOAD:
+        header.set_flag(UDPFlags.DOWNLOAD)
+    if args.protocol == "stop_and_wait":
+        header.clear_flag(UDPFlags.PROTOCOL)
+    elif args.protocol == "sack":
+        header.set_flag(UDPFlags.PROTOCOL)
 
-		if header.has_ack() and header.has_start() and header.sequence == 0:
-			header.set_flag(UDPFlags.ACK)
-			send_package(client_socket, connection, header, b"")
-			send_package(client_socket, connection, header, b"")
-			logger.info("Conexión establecida con el servidor.")
-			return True
-		else:
-			logger.error("Error: No se pudo establecer conexión con el servidor.")
-			return False
-	except ConnectionResetError:
-		logger.error("Error: Conexión rechazada por el servidor.")
-		return False
-	except socket.timeout:
-		logger.error("Error: No se pudo establecer conexión con el servidor.")
-		return False
+    try:
+        send_package(client_socket, connection, header, connection.path.encode())
+        addr, header, data = receive_package(client_socket)
+
+        if header.has_ack() and header.has_start() and header.sequence == 0:
+            header.set_flag(UDPFlags.ACK)
+            send_package(client_socket, connection, header, b"")
+            send_package(client_socket, connection, header, b"")
+            logger.info("Conexión establecida con el servidor.")
+            return True
+        else:
+            logger.error("Error: No se pudo establecer conexión con el servidor.")
+            return False
+    except ConnectionResetError:
+        logger.error("Error: Conexión rechazada por el servidor.")
+        return False
+    except socket.timeout:
+        logger.error("Error: No se pudo establecer conexión con el servidor.")
+        return False

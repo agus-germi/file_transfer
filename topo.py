@@ -18,19 +18,20 @@ class MyTopo(Topo):
     def build(self):
         s1 = self.addSwitch("s1")
         if self.nhosts == 2:
-            self.addHost('JuanLopez')
-            self.addHost('Hamelin')
-            self.addLink('JuanLopez', s1)
-            self.addLink('Hamelin', s1, loss=self.arg_loss)
+            self.addHost("JuanLopez")
+            self.addHost("Hamelin")
+            self.addLink("JuanLopez", s1)
+            self.addLink("Hamelin", s1, loss=self.arg_loss)
             return
         else:
-            server = self.addHost('aserver')
+            server = self.addHost("aserver")
             self.addLink(server, s1, loss=self.arg_loss)
-            hosts = ['h' + str(i) for i in range(1, self.nhosts + 1)]
+            hosts = ["h" + str(i) for i in range(1, self.nhosts + 1)]
 
             for host in hosts:
                 self.addHost(host)
                 self.addLink(host, s1)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

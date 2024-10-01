@@ -197,7 +197,7 @@ if __name__ == "__main__":
         logger.error(e)
     except Exception as e:
         logger.error(f"Error en main: {e}")
-        #logger.error(traceback.format_exc())
+        # logger.error(traceback.format_exc())
     finally:
         close_connection(client_socket, connection)
         client_socket.close()
