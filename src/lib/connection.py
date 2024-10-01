@@ -4,6 +4,7 @@ import threading
 import queue
 import os
 import select
+import logging 
 
 from lib.constants import (
     TIMEOUT,
@@ -18,10 +19,8 @@ from lib.constants import (
     MAX_SAC_DIF,
 )
 from lib.udp import UDPHeader, UDPFlags, UDPPackage
-from lib.logger import setup_logger
 
-# Asumimos que siempre es necesario mostrar estos logs
-logger = setup_logger(verbose=True, quiet=False)
+logger = logging.getLogger("app_logger")
 
 
 class BaseConnection:
