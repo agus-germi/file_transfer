@@ -40,7 +40,7 @@ class BaseConnection:
         self.received_out_of_order = []
         self.window_sents = 0
         self.ttl = 0
-        self.retrys = 0
+        self.retries = 0
 
     def __repr__(self):
         return f"Cliente ({self.addr})"

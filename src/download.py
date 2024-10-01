@@ -39,14 +39,14 @@ connection = Connection(
 )
 
 
-def connect_server(protocol):
+def connect_server():
     header = UDPHeader(connection.sequence)
     header.set_flag(UDPFlags.START)
     if DOWNLOAD:
         header.set_flag(UDPFlags.DOWNLOAD)
-    if protocol == "stop_and_wait":
+    if args.protocol == "stop_and_wait":
         header.clear_flag(UDPFlags.PROTOCOL)
-    elif protocol == "sack":
+    elif args.protocol == "sack":
         header.set_flag(UDPFlags.PROTOCOL)
 
     try:
@@ -78,7 +78,7 @@ def download_stop_and_wait():
             addr, header, data = receive_package(client_socket)
             if header.has_data():
                 # Cuando recibo data exitosamente reseteo el retries
-                connection.retrys = 0
+                connection.retries = 0
                 if header.sequence not in connection.fragments:
                     connection.fragments[header.sequence] = data
                     connection.sequence = header.sequence
@@ -105,10 +105,10 @@ def download_stop_and_wait():
         except socket.timeout:
             send_ack(client_socket, connection, sequence=connection.sequence)
             logger.warning(f"Reenviando ACK {connection.sequence}")
-            if connection.retrys > MAX_RETRIES:
+            if connection.retries > MAX_RETRIES:
                 connection.is_active = False
                 return False
-            connection.retrys += 1
+            connection.retries += 1
 
 
 def download_with_sack():
@@ -120,7 +120,7 @@ def download_with_sack():
             addr, header, data = receive_package(client_socket)
 
             if header.has_data():
-                connection.retrys = 0
+                connection.retries = 0
                 if header.sequence not in connection.fragments:
                     connection.fragments[header.sequence] = data
                     logger.info(f"Fragmento {header.sequence} recibido del servidor.")
@@ -176,23 +176,23 @@ def download_with_sack():
                 connection.sequence,
                 connection.received_out_of_order,
             )
-            if connection.retrys > MAX_RETRIES:
+            if connection.retries > MAX_RETRIES:
                 # TODO Nunca se sube el retries
                 connection.is_active = False
                 return False
-            connection.retrys += 1
+            connection.retries += 1
 
     return True
 
 
-def handle_download(protocol):
-    if protocol == "stop_and_wait":
+def handle_download():
+    if args.protocol == "stop_and_wait":
         download_stop_and_wait()
-    elif protocol == "sack":
+    elif args.protocol == "sack":
         download_with_sack()
     else:
-        logger.error(f"Protocolo no soportado: {protocol}")
-        raise ValueError(f"Protocolo no soportado: {protocol}")
+        logger.error(f"Protocolo no soportado: {args.protocol}")
+        raise ValueError(f"Protocolo no soportado: {args.protocol}")
 
     force_send_end(client_socket, connection, send_end_confirmation)
 
@@ -221,9 +221,9 @@ def setup_signal_handling():
 if __name__ == "__main__":
     setup_signal_handling()
     try:
-        if connect_server(args.protocol):
+        if connect_server():
             connection.path = f"{args.dst}/{args.name}"
-            handle_download(args.protocol)
+            handle_download()
     except ValueError as e:
         logger.error(e)
         # logger.error(traceback.format_exc())
