@@ -147,7 +147,7 @@ class ClientConnection(BaseConnection, threading.Thread):
             key = next(iter(self.fragments))
             data = self.fragments[key]
             send_data(self.socket, self, data, sequence=key)
-            logger.info(f"Enviando paquete {self.addr}: {key} - Seq: {self.sequence}")
+            logger.info(f"Enviando paquete {self.addr}: {key}")
         else:
             send_end(self.socket, self)
             self.is_active = False
