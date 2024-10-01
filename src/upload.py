@@ -70,7 +70,7 @@ def upload_stop_and_wait():
 			elif header.has_close():
 				connection.is_active = False
 			else:
-				logger.error(
+				logger.warning(
 					f"Received ACK {header.sequence} is not {connection.sequence} "
 				)
 
