@@ -75,7 +75,7 @@ def upload_stop_and_wait():
 				)
 
 		except TimeoutError:
-			logger.error(
+			logger.warning(
 				f"ACK {connection.sequence} no recibido del servidor. Reenviando."
 			)
 			if connection.retries > MAX_RETRIES:
@@ -90,7 +90,6 @@ def send_sack_data():
 		):  # Solo mandamos los primeros 8 elementos
 			break
 		if key > connection.sequence + MAX_SAC_DIF:
-			# Se lleno la cola
 			break
 
 
@@ -149,12 +148,11 @@ def upload_with_sack():
 			time.sleep(PACKAGE_SEND_DELAY)
 
 		except TimeoutError:
-			logger.error("TIMEOUT")
 			connection.window_sents -= SACK_WINDOW_SIZE / 2
 			if connection.retries > MAX_RETRIES:
 				connection.is_active = False
 			if connection.retries % 2 == 0:
-				logger.info(f"Quedan fragmentos:  {len(connection.fragments)}")
+				#logger.info(f"Quedan fragmentos:  {len(connection.fragments)}")
 				#time.sleep(PACKAGE_SEND_DELAY)
 				send_sack_data()
 			connection.retries += 1
