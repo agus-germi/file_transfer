@@ -16,6 +16,7 @@ from lib.connection import (
 	force_send_end,
 	is_data_available,
 	force_send_close,
+	connect_server,
 )
 from lib.udp import UDPFlags, UDPHeader
 from lib.constants import (
@@ -25,13 +26,13 @@ from lib.constants import (
 	SEND_WINDOW_SIZE,
 	PACKAGE_SEND_DELAY,
 	MAX_SAC_DIF,
+	MAX_RETRIES,
 )
 
 
 UPLOAD = True
 DOWNLOAD = False
 
-# TODO: poner todo esto en otro lado
 args = parse_upload_args()
 logger = setup_logger(verbose=args.verbose, quiet=args.quiet)
 
@@ -40,47 +41,15 @@ client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 client_socket.settimeout(TIMEOUT)
 
 connection = Connection(
-	addr=(args.host, args.port),  # Usa los argumentos parseados
+	addr=(args.host, args.port),
 	sequence=0,
 	download=DOWNLOAD,
 	path=args.name,
 )
 
 
-def connect_server():
-	header = UDPHeader(connection.sequence)
-	header.set_flag(UDPFlags.START)
-	if DOWNLOAD:
-		header.set_flag(UDPFlags.DOWNLOAD)
-	if args.protocol == "stop_and_wait":
-		header.clear_flag(UDPFlags.PROTOCOL)
-	elif args.protocol == "sack":
-		header.set_flag(UDPFlags.PROTOCOL)
-
-	try:
-		send_package(client_socket, connection, header, connection.path.encode())
-		addr, header, data = receive_package(client_socket)
-
-		if header.has_ack() and header.has_start() and header.sequence == 0:
-			header.set_flag(UDPFlags.ACK)
-			send_package(client_socket, connection, header, b"")
-			send_package(client_socket, connection, header, b"")
-			logger.info("Conexión establecida con el servidor.")
-			return True
-		else:
-			logger.error("Error: No se pudo establecer conexión con el servidor.")
-			return False
-	except ConnectionResetError:
-		logger.error("Error: Conexión rechazada por el servidor.")
-		return False
-	except socket.timeout:
-		logger.error("Error: No se pudo establecer conexión con el servidor.")
-		return False
-
-
 def upload_stop_and_wait():
 	"""Envía un archivo al servidor en fragmentos usando UDP."""
-	connection.path = args.src
 	connection.get_fragments()
 	connection.is_active = True
 
@@ -108,6 +77,9 @@ def upload_stop_and_wait():
 			logger.error(
 				f"ACK {connection.sequence} no recibido del servidor. Reenviando."
 			)
+			if connection.retries > MAX_RETRIES:
+				connection.is_active = False
+			connection.retries += 1
 
 
 def send_sack_data():
@@ -158,7 +130,6 @@ def handle_ack_sack(header: UDPHeader):
 def upload_with_sack():
 	client_socket.settimeout(TIMEOUT_SACK)
 	connection.sequence = 1
-	connection.path = args.src
 	connection.get_fragments()
 	connection.is_active = True
 
@@ -179,7 +150,9 @@ def upload_with_sack():
 		except TimeoutError:
 			logger.error("TIMEOUT")
 			connection.window_sents -= SACK_WINDOW_SIZE / 2
-			if connection.retries % 3 == 0:
+			if connection.retries > MAX_RETRIES:
+				connection.is_active = False
+			if connection.retries % 2 == 0:
 				logger.info(f"Quedan fragmentos:  {len(connection.fragments)}")
 				#time.sleep(PACKAGE_SEND_DELAY)
 				send_sack_data()
@@ -189,6 +162,7 @@ def upload_with_sack():
 
 
 def handle_upload():
+	connection.path = args.src
 	try:
 		if args.protocol == "stop_and_wait":
 			upload_stop_and_wait()
@@ -224,9 +198,12 @@ def setup_signal_handling():
 if __name__ == "__main__":
 	setup_signal_handling()
 	try:
-		if connect_server():
+		if connect_server(client_socket, connection, DOWNLOAD, args):
 			handle_upload()
+	except ValueError as e:
+		logger.error(e)
 	except Exception as e:
 		logger.error(f"Error en main: {e}")
 	finally:
+		close_connection(client_socket, connection)
 		client_socket.close()

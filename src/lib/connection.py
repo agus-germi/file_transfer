@@ -15,7 +15,6 @@ from lib.constants import (
     SACK_WINDOW_SIZE,
     SEND_WINDOW_SIZE,
     PACKAGE_SEND_DELAY,
-    MAX_TTL,
     MAX_SAC_DIF,
 )
 from lib.udp import UDPHeader, UDPFlags, UDPPackage
@@ -39,7 +38,6 @@ class BaseConnection:
         self.fragments = {}
         self.received_out_of_order = []
         self.window_sents = 0
-        self.ttl = 0
         self.retries = 0
 
     def __repr__(self):
@@ -100,7 +98,7 @@ class ClientConnection(BaseConnection, threading.Thread):
 
                 if self.upload:
                     if message["header"].has_data():
-                        self.ttl = 0
+                        self.retries = 0
                         self.receive_data(message)
                     elif message["header"].has_end():
                         self.send_end_confirmation()
@@ -109,18 +107,18 @@ class ClientConnection(BaseConnection, threading.Thread):
 
             except queue.Empty:
                 logger.warning(f"Cliente {self.addr} no ha enviado mensajes recientes.")
-                if self.ttl >= MAX_TTL:
+                if self.retries > MAX_RETRIES:
                     logger.warning(
-                        f"Cliente {self.addr} inactivo por {MAX_TTL} intentos."
+                        f"Cliente {self.addr} inactivo por {MAX_RETRIES} intentos."
                     )
                     self.is_active = False
-                elif self.ttl <= MAX_RETRIES:
+                else:
                     if self.upload:
                         send_ack(self.socket, self)
                     else:
                         self.send_data()
 
-                self.ttl += 1
+                self.retries += 1
             except Exception as e:
                 logger.error(f"Error con {self.addr}: {e}")
                 self.is_active = False
@@ -141,7 +139,7 @@ class ClientConnection(BaseConnection, threading.Thread):
 
     def send_data(self, message=None):
         if message and message["header"].has_ack():
-            self.ttl = 0
+            self.retries = 0
             sequence = message["header"].sequence
             logger.info(f"ACK {sequence} recibido desde {self}")
             if sequence in self.fragments:
@@ -175,7 +173,7 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 
                 if self.upload:
                     if message["header"].has_data():
-                        self.ttl = 0
+                        self.retries = 0
                         # print("RECIBI DATA ", message["header"].sequence)
                         self.receive_data(message)
                     elif message["header"].has_end():
@@ -192,12 +190,12 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
 
             except queue.Empty:
                 logger.warning(f"Cliente {self.addr} no ha enviado mensajes recientes.")
-                if self.ttl >= MAX_TTL:
+                if self.retries > MAX_RETRIES:
                     logger.warning(
-                        f"Cliente {self.addr} inactivo por {MAX_TTL} intentos."
+                        f"Cliente {self.addr} inactivo por {MAX_RETRIES} intentos."
                     )
                     self.is_active = False
-                elif self.ttl <= MAX_RETRIES:
+                else:
                     if self.upload:
                         send_sack_ack(
                             self.socket, self, self.sequence, self.received_out_of_order
@@ -205,7 +203,7 @@ class ClientConnectionSACK(BaseConnection, threading.Thread):
                     else:
                         self.send_data_sack()
 
-                self.ttl += 1
+                self.retries += 1
             except ValueError as e:
                 logger.error(f"Error con {self.addr}: {e}")
                 self.is_active = False
@@ -386,12 +384,11 @@ def reject_connection(socket: socket.socket, connection: Connection):
 
 
 def is_data_available(socket: socket.socket, timeout=0.0):
-    # El primer argumento es la lista de sockets que queremos comprobar si están listos para leer
-    # El segundo argumento es para escribir, y el tercero para errores (ambos no los necesitamos)
     ready = select.select([socket], [], [], timeout)
-    return bool(ready[0])  # Si hay algo listo para leer, `ready[0]` contendrá el socket
+    return bool(ready[0])
 
 
+###################
 # Common to clients
 def force_send_end(socket: socket.socket, connection: Connection, function):
     for i in range(3):
@@ -414,3 +411,33 @@ def force_send_close(socket: socket.socket, connection: Connection, function):
                 break
         except TimeoutError:
             pass
+
+def connect_server(client_socket: socket.socket, connection: Connection, DOWNLOAD: bool, args):
+	header = UDPHeader(connection.sequence)
+	header.set_flag(UDPFlags.START)
+	if DOWNLOAD:
+		header.set_flag(UDPFlags.DOWNLOAD)
+	if args.protocol == "stop_and_wait":
+		header.clear_flag(UDPFlags.PROTOCOL)
+	elif args.protocol == "sack":
+		header.set_flag(UDPFlags.PROTOCOL)
+
+	try:
+		send_package(client_socket, connection, header, connection.path.encode())
+		addr, header, data = receive_package(client_socket)
+
+		if header.has_ack() and header.has_start() and header.sequence == 0:
+			header.set_flag(UDPFlags.ACK)
+			send_package(client_socket, connection, header, b"")
+			send_package(client_socket, connection, header, b"")
+			logger.info("Conexión establecida con el servidor.")
+			return True
+		else:
+			logger.error("Error: No se pudo establecer conexión con el servidor.")
+			return False
+	except ConnectionResetError:
+		logger.error("Error: Conexión rechazada por el servidor.")
+		return False
+	except socket.timeout:
+		logger.error("Error: No se pudo establecer conexión con el servidor.")
+		return False

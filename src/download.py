@@ -15,6 +15,7 @@ from lib.connection import (
     send_sack_ack,
     force_send_end,
     force_send_close,
+    connect_server,
 )
 from lib.udp import UDPFlags, UDPHeader
 from lib.constants import MAX_RETRIES, TIMEOUT, TIMEOUT_SACK
@@ -26,51 +27,20 @@ DOWNLOAD = True
 args = parse_download_args()
 logger = setup_logger(verbose=args.verbose, quiet=args.quiet)
 
-
 # Crear un socket UDP
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 client_socket.settimeout(TIMEOUT)
 
 connection = Connection(
-    addr=(args.host, args.port),  # Usa los argumentos parseados
+    addr=(args.host, args.port),
     sequence=0,
     download=DOWNLOAD,
     path=args.name,
 )
 
 
-def connect_server():
-    header = UDPHeader(connection.sequence)
-    header.set_flag(UDPFlags.START)
-    if DOWNLOAD:
-        header.set_flag(UDPFlags.DOWNLOAD)
-    if args.protocol == "stop_and_wait":
-        header.clear_flag(UDPFlags.PROTOCOL)
-    elif args.protocol == "sack":
-        header.set_flag(UDPFlags.PROTOCOL)
-
-    try:
-        send_package(client_socket, connection, header, connection.path.encode())
-        addr, header, data = receive_package(client_socket)
-
-        if header.has_ack() and header.has_start() and header.sequence == 0:
-            header.set_flag(UDPFlags.ACK)
-            send_package(client_socket, connection, header, b"")
-            send_package(client_socket, connection, header, b"")
-            logger.info("Conexión establecida con el servidor.")
-            return True
-        else:
-            logger.error("Error: No se pudo establecer conexión con el servidor. 1")
-            return False
-    except ConnectionResetError:
-        logger.error("Error: Conexión rechazada por el servidor.")
-        return False
-    except socket.timeout:
-        logger.error("Error: No se pudo establecer conexión con el servidor. 2")
-        return False
-
-
 def download_stop_and_wait():
+    """Descarga un archivo del servidor en fragmentos usando UDP."""
     connection.is_active = True
 
     while connection.is_active:
@@ -177,7 +147,6 @@ def download_with_sack():
                 connection.received_out_of_order,
             )
             if connection.retries > MAX_RETRIES:
-                # TODO Nunca se sube el retries
                 connection.is_active = False
                 return False
             connection.retries += 1
@@ -186,6 +155,7 @@ def download_with_sack():
 
 
 def handle_download():
+    connection.path = f"{args.dst}/{args.name}"
     if args.protocol == "stop_and_wait":
         download_stop_and_wait()
     elif args.protocol == "sack":
@@ -221,15 +191,13 @@ def setup_signal_handling():
 if __name__ == "__main__":
     setup_signal_handling()
     try:
-        if connect_server():
-            connection.path = f"{args.dst}/{args.name}"
+        if connect_server(client_socket, connection, DOWNLOAD, args):
             handle_download()
     except ValueError as e:
         logger.error(e)
-        # logger.error(traceback.format_exc())
     except Exception as e:
         logger.error(f"Error en main: {e}")
-        logger.error(traceback.format_exc())
+        #logger.error(traceback.format_exc())
     finally:
         close_connection(client_socket, connection)
         client_socket.close()
