@@ -58,7 +58,7 @@ def upload_stop_and_wait():
 		connection.sequence = key
 		data = connection.fragments[key]
 		send_data(client_socket, connection, data, sequence=connection.sequence)
-		logger.info(f"Fragmento {connection.sequence} enviado al servidor.")
+		logger.info(f"Enviando paquete {connection.sequence} - Quedan [{len(connection.fragments)}]")
 
 		try:
 			addr, header, data = receive_package(client_socket)
@@ -95,7 +95,7 @@ def send_sack_data():
 
 		send_data(client_socket, connection, data, sequence=key)
 		connection.window_sents += 1
-		logger.info(f"Enviando paquete  {key}  quedan {len(connection.fragments)}")
+		logger.info(f"Enviando paquete {key} - Quedan [{len(connection.fragments)}]")
 
 	# Se enviaron por completo el archivo
 	if not connection.fragments:
