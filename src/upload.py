@@ -58,7 +58,9 @@ def upload_stop_and_wait():
         connection.sequence = key
         data = connection.fragments[key]
         send_data(client_socket, connection, data, sequence=connection.sequence)
-        logger.info(f"Fragmento {connection.sequence} enviado al servidor.")
+        logger.info(
+            f"Enviando paquete {connection.sequence} - Quedan [{len(connection.fragments)}]"
+        )
 
         try:
             addr, header, data = receive_package(client_socket)
