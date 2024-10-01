@@ -38,8 +38,6 @@ class UDPHeader:
 					one_bits.append(bits_total - i)
 					sequences.append(bits_total -i + self.sequence)
 		
-			# Borrar todos los paquetes con numero de sequencia < al primer elemento y los elementos del segundo elemento
-			# Puede estar el caso border que si la diferencia entre lo que no recibio y el paquete que estoy mandando es mayor a 20. Me enfoco en mandar lo que no se recibio
 			return (self.sequence, sequences)
 		
 		except Exception as e:
@@ -52,7 +50,7 @@ class UDPHeader:
     
 		# Iteramos sobre las posiciones dadas
 		for n in positions:
-			if 0 <= n < 32:  # Aseguramos que la posición no exceda los 32 bits
+			if 0 <= n < 32:  # Aseguramos que la posición no exceda los 32 bits de SAK
 				# Desplazamos 1 a la izquierda por (31 - n) posiciones para establecer el bit
 				bits |= (1 << (31 - n))
 			else:

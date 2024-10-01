@@ -34,7 +34,6 @@ server_socket.bind(server_address)
 def check_connection(
     server_socket, addr, header: UDPHeader, data: bytes, storage_dir: str, logger
 ):
-    # TODO: Verificar que data se pueda decodear
     if header.has_protocol():
         connection = ClientConnectionSACK(
             server_socket,
@@ -112,15 +111,12 @@ def handle_connection(server_socket, storage_dir, logger):
                 connection.join()
             connections.pop(addr)
             close_connection(server_socket, connection)
-            # TODO Habria que cerrar desde el server?
-            # Si se pierde el paquete este -> El server por ttl sabe que tiene que cerrar esta conexion
             logger.info(f"Cliente Desconectado: {addr}")
         else:
             message = {"addr": addr, "header": header, "data": data}
             connection.put_message(message)
 
     except ConnectionResetError as e:
-        logger.error(f"BLA: {e}")
         logger.error("Error: Conexión rechazada por el cliente.")
 
 
@@ -140,7 +136,7 @@ def limpiar_recursos(signum, frame):
             connection.join()
         close_connection(server_socket, connection)
     server_socket.close()
-    sys.exit(0)  # Salgo del programa con código 0 (éxito)
+    sys.exit(0)  # Salgo del programa con código 0 (exito)
 
 
 def setup_signal_handling():
@@ -153,6 +149,5 @@ def setup_signal_handling():
 
 if __name__ == "__main__":
     setup_signal_handling()
-    # TODO Limpiar todos los recursos de connection con su respectivo JOIN al cerrar abruptamente
     start_server()
     limpiar_recursos(0, 0)
