@@ -13,9 +13,6 @@ El protocolo garantiza la entrega confiable de archivos implementando dos versio
 
 Además, se simulan condiciones de pérdida de paquetes usando **Mininet** para validar la robustez del protocolo.
 
-- ### Requisitos
- (Agregar requisitos!)
-
 *Dependencias*
     - **Python 3.x** 
     - **Librería estándar de sockets** (incluida en Python)
